@@ -2,12 +2,12 @@
 
 namespace App\Console\Commands;
 
+use App\UseCases\Users\CreateUser as CreateUserUseCase;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Console\Isolatable;
 use Illuminate\Validation\ValidationException;
-use App\UseCases\Users\CreateUser as CreateUserUseCase;
 
 #[Signature('create:user')]
 #[Description('Создать нового пользователя')]
@@ -32,9 +32,9 @@ class CreateUser extends Command implements Isolatable
             $this->components->success("Пользователь {$user->email} создан.");
 
             return self::SUCCESS;
-        }catch (ValidationException $exception){
-            foreach ($exception->errors() as $messages){
-                foreach ($messages as $message){
+        } catch (ValidationException $exception) {
+            foreach ($exception->errors() as $messages) {
+                foreach ($messages as $message) {
                     $this->components->error($message);
                 }
             }
