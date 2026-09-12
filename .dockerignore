@@ -1,0 +1,13 @@
+vendor
+
+.git
+.idea
+
+.env
+
+storage/logs
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/testing/*
+
+bootstrap/cache/*

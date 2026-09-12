@@ -1,0 +1,45 @@
+services:
+    app:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        volumes:
+            -   .:/var/www
+            - ./.docker/php/local.ini:/usr/local/etc/php/conf.d/local.ini:ro
+        working_dir: /var/www
+        depends_on:
+            db:
+                condition: service_healthy
+
+    caddy:
+        image: caddy:2.10-alpine
+        restart: unless-stopped
+        ports:
+            -   "8080:80"
+        volumes:
+            -   .:/var/www:ro
+            - ./.docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+        depends_on:
+            - app
+
+    db:
+        image: mysql:8.0
+        restart: unless-stopped
+        ports:
+            - "3306:3306"
+        volumes:
+            - db_data:/var/lib/mysql
+        environment:
+            MYSQL_DATABASE: ${DB_DATABASE}
+            MYSQL_USER: ${DB_USERNAME}
+            MYSQL_PASSWORD: ${DB_PASSWORD}
+            MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+        healthcheck:
+            test: [ "CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent" ]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 30s
+
+volumes:
+    db_data:
