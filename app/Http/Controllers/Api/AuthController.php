@@ -8,6 +8,7 @@ use App\Http\Requests\SignInRequest;
 use App\UseCases\Auth\Logout\Logout;
 use App\UseCases\Auth\SignIn\SignIn;
 use App\UseCases\Auth\SignIn\SignInInput;
+use Dedoc\Scramble\Attributes\Response as ScrambleResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -17,6 +18,11 @@ class AuthController extends Controller
     /**
      * @throws InvalidCredentialsException
      */
+    #[ScrambleResponse(
+        status: 401,
+        description: 'Неверный логин или пароль',
+        type: "array{status: 'error', message: string}"
+    )]
     public function signIn(SignInRequest $request, SignIn $signIn): JsonResponse
     {
         $input = new SignInInput($request->string('email')->toString(), $request->string('password')->toString(), $request->boolean('remember'));
