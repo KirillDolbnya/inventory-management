@@ -12,7 +12,7 @@ class SignIn
      */
     public function __invoke(SignInInput $input): SignInOutput
     {
-        $isLogIn = Auth::attempt(['email' => $input->email, 'password' => $input->password], $input->remember);
+        $isLogIn = Auth::guard('web')->attempt(['email' => $input->email, 'password' => $input->password], $input->remember);
 
         if (! $isLogIn) {
             throw new InvalidCredentialsException;

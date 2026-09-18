@@ -8,6 +8,6 @@ class Logout
 {
     public function __invoke(): void
     {
-        Auth::logout();
+        Auth::guard('web')->logout();
     }
 }
