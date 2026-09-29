@@ -15,6 +15,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('warehouses')->group(function () {
         Route::controller(WarehouseController::class)->group(function () {
             Route::post('', 'store')->name('warehouses-create');
+            Route::patch('{warehouseId}', 'update')->name('warehouses-update')->where('warehouseId', '[0-9]+');
         });
     });
 });

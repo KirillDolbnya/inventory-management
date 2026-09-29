@@ -2,11 +2,12 @@
 
 namespace App\Repositories;
 
+use App\Data\Addresses\ResolvedAddress;
 use App\Models\Warehouse;
 
 class WarehouseRepository
 {
-    public function create(string $name, string $address, string $fiasId, string $latitude, string $longitude): Warehouse
+    public function create(string $name, string $address, string $fiasId, float $latitude, float $longitude): Warehouse
     {
         return Warehouse::create([
             'name' => $name,
@@ -17,13 +18,42 @@ class WarehouseRepository
         ]);
     }
 
-    public function existsByName(string $name): bool
+    public function update(Warehouse $warehouse, ?string $nameChange, ?ResolvedAddress $addressChange): Warehouse
     {
-        return Warehouse::query()->where('name', $name)->exists();
+        $updateData = [];
+
+        if ($nameChange !== null) {
+            $updateData['name'] = $nameChange;
+        }
+
+        if ($addressChange !== null) {
+            $updateData['address'] = $addressChange->getAddress();
+            $updateData['fias_id'] = $addressChange->getFiasId();
+            $updateData['latitude'] = $addressChange->getLatitude();
+            $updateData['longitude'] = $addressChange->getLongitude();
+        }
+
+        if (empty($updateData)) {
+            return $warehouse;
+        }
+
+        $warehouse->update($updateData);
+
+        return $warehouse;
     }
 
-    public function existsByFiasId(string $fiasId): bool
+    public function getById(int $id): ?Warehouse
     {
-        return Warehouse::query()->where('fias_id', $fiasId)->exists();
+        return Warehouse::query()->find($id);
+    }
+
+    public function existsByName(string $name, ?int $id = null): bool
+    {
+        return Warehouse::query()->where('name', $name)->when($id !== null, fn ($query) => $query->whereKeyNot($id))->exists();
+    }
+
+    public function existsByFiasId(string $fiasId, ?int $id = null): bool
+    {
+        return Warehouse::query()->where('fias_id', $fiasId)->when($id !== null, fn ($query) => $query->whereKeyNot($id))->exists();
     }
 }
