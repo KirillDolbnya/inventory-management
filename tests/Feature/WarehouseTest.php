@@ -120,7 +120,7 @@ describe('Warehouse creation', function () {
     it('rejects request with duplicate warehouse name', function () {
         $warehouseRepository = new WarehouseRepository;
 
-        $warehouseRepository->create('Склад 1', 'г. Москва, Ленинские горы, д. 1', 'b8c9d0e1-f2a3-4b5c-8d9e-0f1a2b3c4d5e', '55.702936', '37.530768');
+        $warehouseRepository->create('Склад 1', 'г. Москва, Ленинские горы, д. 1', 'b8c9d0e1-f2a3-4b5c-8d9e-0f1a2b3c4d5e', 55.702936, 37.530768);
 
         assertDatabaseCount('warehouses', 1);
 
@@ -138,7 +138,7 @@ describe('Warehouse creation', function () {
     it('rejects request with duplicate warehouse fias id', function () {
         $warehouseRepository = new WarehouseRepository;
 
-        $warehouseRepository->create('Склад 1', 'г. Москва, Ленинские горы, д. 1', '8ed1481e-1f9e-4340-9774-325db197bf5d', '55.702936', '37.530768');
+        $warehouseRepository->create('Склад 1', 'г. Москва, Ленинские горы, д. 1', '8ed1481e-1f9e-4340-9774-325db197bf5d', 55.702936, 37.530768);
 
         assertDatabaseCount('warehouses', 1);
 
@@ -158,7 +158,7 @@ describe('Warehouse creation', function () {
 
         $response = $this->be($this->user)->postJson(route('warehouses-create'), [
             'name' => 'Склад 2',
-            'fias_id' => 'b8c9d0e1-f2a3-4b5c-8d9e-0f1a2b3c4d5e',
+            'fias_id' => 'cd2a3b4e-5f6a-7b8c-9d0e-1f2a3b4c5d6e',
         ]);
 
         $response->assertStatus(422)

@@ -6,8 +6,8 @@ readonly class ResolvedAddress
 {
     public function __construct(
         private string $address,
-        private string $latitude,
-        private string $longitude,
+        private float $latitude,
+        private float $longitude,
         private string $fiasId,
     ) {}
 
@@ -16,12 +16,12 @@ readonly class ResolvedAddress
         return $this->address;
     }
 
-    public function getLatitude(): string
+    public function getLatitude(): float
     {
         return $this->latitude;
     }
 
-    public function getLongitude(): string
+    public function getLongitude(): float
     {
         return $this->longitude;
     }
