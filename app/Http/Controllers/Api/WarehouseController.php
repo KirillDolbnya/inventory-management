@@ -11,10 +11,13 @@ use App\Http\Requests\WarehouseCreateRequest;
 use App\Http\Requests\WarehouseUpdateRequest;
 use App\UseCases\Warehouse\Create\CreateWarehouse;
 use App\UseCases\Warehouse\Create\CreateWarehouseInput;
+use App\UseCases\Warehouse\QueryDetail\QueryDetailWarehouse;
+use App\UseCases\Warehouse\QueryDetail\QueryDetailWarehouseInput;
 use App\UseCases\Warehouse\Update\UpdateWarehouse;
 use App\UseCases\Warehouse\Update\UpdateWarehouseInput;
 use Dedoc\Scramble\Attributes\Response as ScrambleResponse;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class WarehouseController extends Controller
 {
@@ -58,6 +61,23 @@ class WarehouseController extends Controller
         $input = new UpdateWarehouseInput((int) $request->route('warehouseId'), $request->has('name') ? $request->string('name')->toString() : null, $request->has('fias_id') ? $request->string('fias_id')->toString() : null);
 
         $output = ($updateWarehouse)($input);
+
+        return response()->json(['id' => $output->id, 'name' => $output->name, 'address' => $output->address, 'latitude' => $output->latitude, 'longitude' => $output->longitude], 200);
+    }
+
+    /**
+     * @throws WarehouseNotFoundException
+     */
+    #[ScrambleResponse(
+        status: 404,
+        description: 'Resource not found',
+        type: 'array{message: string}'
+    )]
+    public function show(Request $request, QueryDetailWarehouse $queryDetailWarehouse): JsonResponse
+    {
+        $input = new QueryDetailWarehouseInput((int) $request->route('warehouseId'));
+
+        $output = ($queryDetailWarehouse)($input);
 
         return response()->json(['id' => $output->id, 'name' => $output->name, 'address' => $output->address, 'latitude' => $output->latitude, 'longitude' => $output->longitude], 200);
     }
