@@ -479,3 +479,63 @@ describe('Warehouse update', function () {
         ]);
     });
 });
+
+describe('Warehouse show', function () {
+    beforeEach(function () {
+        $name = 'Name';
+        $email = 'test@test.com';
+        $password = 'password1234';
+
+        $this->user = User::factory()->createOne([
+            'name' => $name,
+            'email' => $email,
+            'password' => $password,
+        ]);
+
+        $warehouseRepository = new WarehouseRepository;
+
+        $this->warehouse = $warehouseRepository->create('Склад 1', 'г. Москва, Ленинские горы, д. 1', '8ed1481e-1f9e-4340-9774-325db197bf5d', 55.702936, 37.530768);
+    });
+
+    it('shows a warehouse', function () {
+        $response = $this->be($this->user)->getJson(route('warehouses-show', ['warehouseId' => $this->warehouse->id]));
+
+        $response->assertStatus(200);
+
+        $response->assertJson([
+            'id' => $this->warehouse->id,
+            'name' => 'Склад 1',
+            'address' => 'г. Москва, Ленинские горы, д. 1',
+            'latitude' => 55.702936,
+            'longitude' => 37.530768,
+        ]);
+    });
+
+    it('rejects an unauthenticated request', function () {
+        $response = $this->getJson(route('warehouses-show', ['warehouseId' => $this->warehouse->id]));
+
+        $response->assertStatus(401);
+
+        $response->assertJson([
+            'message' => 'Unauthenticated.',
+        ]);
+    });
+
+    it('returns 404 for a missing warehouse', function () {
+        $response = $this->be($this->user)->getJson(route('warehouses-show', ['warehouseId' => $this->warehouse->id + 1000]));
+
+        $response->assertStatus(404)
+            ->assertJson([
+                'message' => 'Склад с передаваемым id не найден',
+            ]);
+    });
+
+    it('returns 404 when the warehouse ID is not numeric', function () {
+        $response = $this->be($this->user)->getJson(route('warehouses-show', ['warehouseId' => 'text']));
+
+        $response->assertStatus(404)
+            ->assertJson([
+                'message' => 'Запрашиваемый ресурс или маршрут не найден.',
+            ]);
+    });
+});
