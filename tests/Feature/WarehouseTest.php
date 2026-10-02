@@ -539,3 +539,67 @@ describe('Warehouse show', function () {
             ]);
     });
 });
+
+describe('Warehouse index', function () {
+    beforeEach(function () {
+        $name = 'Name';
+        $email = 'test@test.com';
+        $password = 'password1234';
+
+        $this->user = User::factory()->createOne([
+            'name' => $name,
+            'email' => $email,
+            'password' => $password,
+        ]);
+    });
+
+    it('returns a list of warehouses', function () {
+        $warehouseRepository = new WarehouseRepository;
+
+        $this->warehouseOne = $warehouseRepository->create('Склад 1', 'г. Москва, Ленинские горы, д. 1', '8ed1481e-1f9e-4340-9774-325db197bf5d', 55.702936, 37.530768);
+        $this->warehouseTwo = $warehouseRepository->create('Склад 2', 'г. Москва, ул. Петровка, д. 17', 'b8c9d0e1-f2a3-4b5c-8d9e-0f1a2b3c4d5e', 55.7646600, 37.6162100);
+
+        $response = $this->be($this->user)->getJson(route('warehouses-index'));
+
+        $response->assertStatus(200);
+
+        $response->assertJsonCount(2, 'data');
+
+        $response->assertJson([
+            'data' => [
+                [
+                    'id' => $this->warehouseOne->id,
+                    'name' => 'Склад 1',
+                    'address' => 'г. Москва, Ленинские горы, д. 1',
+                    'latitude' => 55.702936,
+                    'longitude' => 37.530768,
+                ],
+                [
+                    'id' => $this->warehouseTwo->id,
+                    'name' => 'Склад 2',
+                    'address' => 'г. Москва, ул. Петровка, д. 17',
+                    'latitude' => 55.764660,
+                    'longitude' => 37.616210,
+                ],
+            ],
+        ]);
+    });
+
+    it('returns an empty list when no warehouses exist', function () {
+        $response = $this->be($this->user)->getJson(route('warehouses-index'));
+
+        $response->assertStatus(200);
+
+        $response->assertJsonCount(0, 'data');
+    });
+
+    it('rejects an unauthenticated request', function () {
+        $response = $this->getJson(route('warehouses-index'));
+
+        $response->assertStatus(401);
+
+        $response->assertJson([
+            'message' => 'Unauthenticated.',
+        ]);
+    });
+});
