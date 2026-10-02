@@ -9,10 +9,12 @@ use App\Exceptions\WarehouseNotFoundException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\WarehouseCreateRequest;
 use App\Http\Requests\WarehouseUpdateRequest;
+use App\Http\Resources\WarehouseCollection;
 use App\UseCases\Warehouse\Create\CreateWarehouse;
 use App\UseCases\Warehouse\Create\CreateWarehouseInput;
 use App\UseCases\Warehouse\QueryDetail\QueryDetailWarehouse;
 use App\UseCases\Warehouse\QueryDetail\QueryDetailWarehouseInput;
+use App\UseCases\Warehouse\QueryList\QueryListWarehouse;
 use App\UseCases\Warehouse\Update\UpdateWarehouse;
 use App\UseCases\Warehouse\Update\UpdateWarehouseInput;
 use Dedoc\Scramble\Attributes\Response as ScrambleResponse;
@@ -80,5 +82,12 @@ class WarehouseController extends Controller
         $output = ($queryDetailWarehouse)($input);
 
         return response()->json(['id' => $output->id, 'name' => $output->name, 'address' => $output->address, 'latitude' => $output->latitude, 'longitude' => $output->longitude], 200);
+    }
+
+    public function index(QueryListWarehouse $queryListWarehouse): WarehouseCollection
+    {
+        $output = ($queryListWarehouse)();
+
+        return new WarehouseCollection($output->items);
     }
 }

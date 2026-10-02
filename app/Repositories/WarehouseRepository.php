@@ -4,6 +4,7 @@ namespace App\Repositories;
 
 use App\Data\Addresses\ResolvedAddress;
 use App\Models\Warehouse;
+use Illuminate\Support\Collection;
 
 class WarehouseRepository
 {
@@ -40,6 +41,14 @@ class WarehouseRepository
         $warehouse->update($updateData);
 
         return $warehouse;
+    }
+
+    /**
+     * @return Collection<int, Warehouse>
+     */
+    public function getAll(): Collection
+    {
+        return Warehouse::query()->orderBy('id', 'asc')->get();
     }
 
     public function getById(int $id): ?Warehouse
