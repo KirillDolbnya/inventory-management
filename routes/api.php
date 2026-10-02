@@ -18,6 +18,7 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::patch('{warehouseId}', 'update')->name('warehouses-update')->where('warehouseId', '[0-9]+');
             Route::get('{warehouseId}', 'show')->name('warehouses-show')->where('warehouseId', '[0-9]+');
             Route::get('', 'index')->name('warehouses-index');
+            Route::delete('{warehouseId}', 'delete')->name('warehouses-delete')->where('warehouseId', '[0-9]+');
         });
     });
 });

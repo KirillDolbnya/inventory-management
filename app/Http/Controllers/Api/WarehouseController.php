@@ -12,6 +12,8 @@ use App\Http\Requests\WarehouseUpdateRequest;
 use App\Http\Resources\WarehouseCollection;
 use App\UseCases\Warehouse\Create\CreateWarehouse;
 use App\UseCases\Warehouse\Create\CreateWarehouseInput;
+use App\UseCases\Warehouse\Delete\DeleteWarehouse;
+use App\UseCases\Warehouse\Delete\DeleteWarehouseInput;
 use App\UseCases\Warehouse\QueryDetail\QueryDetailWarehouse;
 use App\UseCases\Warehouse\QueryDetail\QueryDetailWarehouseInput;
 use App\UseCases\Warehouse\QueryList\QueryListWarehouse;
@@ -20,6 +22,7 @@ use App\UseCases\Warehouse\Update\UpdateWarehouseInput;
 use Dedoc\Scramble\Attributes\Response as ScrambleResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 
 class WarehouseController extends Controller
 {
@@ -89,5 +92,22 @@ class WarehouseController extends Controller
         $output = ($queryListWarehouse)();
 
         return new WarehouseCollection($output->items);
+    }
+
+    /**
+     * @throws WarehouseNotFoundException
+     */
+    #[ScrambleResponse(
+        status: 404,
+        description: 'Resource not found',
+        type: 'array{message: string}'
+    )]
+    public function delete(Request $request, DeleteWarehouse $deleteWarehouse): Response
+    {
+        $input = new DeleteWarehouseInput((int) $request->route('warehouseId'));
+
+        ($deleteWarehouse)($input);
+
+        return response()->noContent();
     }
 }

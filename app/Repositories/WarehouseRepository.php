@@ -43,6 +43,11 @@ class WarehouseRepository
         return $warehouse;
     }
 
+    public function delete(Warehouse $warehouse): void
+    {
+        $warehouse->delete();
+    }
+
     /**
      * @return Collection<int, Warehouse>
      */
