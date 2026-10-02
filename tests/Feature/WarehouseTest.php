@@ -603,3 +603,58 @@ describe('Warehouse index', function () {
         ]);
     });
 });
+
+describe('Warehouse delete', function () {
+    beforeEach(function () {
+        $name = 'Name';
+        $email = 'test@test.com';
+        $password = 'password1234';
+
+        $this->user = User::factory()->createOne([
+            'name' => $name,
+            'email' => $email,
+            'password' => $password,
+        ]);
+
+        $warehouseRepository = new WarehouseRepository;
+
+        $this->warehouse = $warehouseRepository->create('Склад 1', 'г. Москва, Ленинские горы, д. 1', '8ed1481e-1f9e-4340-9774-325db197bf5d', 55.702936, 37.530768);
+    });
+
+    it('deletes a warehouse', function () {
+        assertDatabaseCount('warehouses', 1);
+
+        $response = $this->be($this->user)->deleteJson(route('warehouses-delete', ['warehouseId' => $this->warehouse->id]));
+
+        $response->assertNoContent();
+
+        assertDatabaseCount('warehouses', 0);
+    });
+
+    it('rejects an unauthenticated request', function () {
+        assertDatabaseCount('warehouses', 1);
+
+        $response = $this->deleteJson(route('warehouses-delete', ['warehouseId' => $this->warehouse->id]));
+
+        $response->assertStatus(401);
+
+        $response->assertJson([
+            'message' => 'Unauthenticated.',
+        ]);
+
+        assertDatabaseCount('warehouses', 1);
+    });
+
+    it('returns 404 for a missing warehouse', function () {
+        assertDatabaseCount('warehouses', 1);
+
+        $response = $this->be($this->user)->deleteJson(route('warehouses-delete', ['warehouseId' => $this->warehouse->id + 1000]));
+
+        $response->assertStatus(404)
+            ->assertJson([
+                'message' => 'Склад с передаваемым id не найден',
+            ]);
+
+        assertDatabaseCount('warehouses', 1);
+    });
+});
