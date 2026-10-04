@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Warehouse extends Model
 {
@@ -18,4 +19,12 @@ class Warehouse extends Model
         'latitude',
         'longitude',
     ];
+
+    /**
+     * @return HasMany<Rack, $this>
+     */
+    public function racks(): HasMany
+    {
+        return $this->hasMany(Rack::class);
+    }
 }
