@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\RackController;
 use App\Http\Controllers\Api\WarehouseController;
 use Illuminate\Support\Facades\Route;
 
@@ -19,6 +20,11 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('{warehouseId}', 'show')->name('warehouses-show')->where('warehouseId', '[0-9]+');
             Route::get('', 'index')->name('warehouses-index');
             Route::delete('{warehouseId}', 'delete')->name('warehouses-delete')->where('warehouseId', '[0-9]+');
+        });
+
+        Route::controller(RackController::class)->group(function () {
+            Route::post('{warehouseId}/racks', 'store')->name('racks-create')->where('warehouseId', '[0-9]+');
+            Route::get('{warehouseId}/racks', 'index')->name('racks-index')->where('warehouseId', '[0-9]+');
         });
     });
 });
