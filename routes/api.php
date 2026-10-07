@@ -24,6 +24,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::controller(RackController::class)->group(function () {
             Route::post('{warehouseId}/racks', 'store')->name('racks-create')->where('warehouseId', '[0-9]+');
+            Route::get('{warehouseId}/racks', 'index')->name('racks-index')->where('warehouseId', '[0-9]+');
         });
     });
 });

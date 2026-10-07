@@ -3,11 +3,12 @@
 namespace App\Http\Resources;
 
 use App\UseCases\Rack\Create\CreateRackItemOutput;
+use App\UseCases\Rack\QueryList\QueryListRackItemOutput;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * @mixin CreateRackItemOutput
+ * @mixin CreateRackItemOutput|QueryListRackItemOutput
  */
 class RackResource extends JsonResource
 {

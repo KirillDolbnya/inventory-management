@@ -63,6 +63,14 @@ class RackRepository
     }
 
     /**
+     * @return Collection<int, Rack>
+     */
+    public function getAllByWarehouseId(int $warehouseId): Collection
+    {
+        return Rack::query()->where(['warehouse_id' => $warehouseId])->orderBy('id', 'asc')->with(['cells' => fn ($query) => $query->orderBy('number', 'asc')])->get();
+    }
+
+    /**
      * @param  array<int, int>  $rackIds
      * @return Collection<int, Rack>
      */

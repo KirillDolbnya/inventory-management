@@ -10,8 +10,11 @@ use App\Http\Resources\RackCollection;
 use App\UseCases\Rack\Create\CreateRackItemInput;
 use App\UseCases\Rack\Create\CreateRacks;
 use App\UseCases\Rack\Create\CreateRacksInput;
+use App\UseCases\Rack\QueryList\QueryListRack;
+use App\UseCases\Rack\QueryList\QueryListRackInput;
 use Dedoc\Scramble\Attributes\Response as ScrambleResponse;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class RackController extends Controller
 {
@@ -41,5 +44,22 @@ class RackController extends Controller
         $output = ($createRacks)($input);
 
         return (new RackCollection($output->racks))->response()->setStatusCode(201);
+    }
+
+    /**
+     * @throws WarehouseNotFoundException
+     */
+    #[ScrambleResponse(
+        status: 404,
+        description: 'Resource not found',
+        type: 'array{message: string}'
+    )]
+    public function index(Request $request, QueryListRack $queryListRack): RackCollection
+    {
+        $input = new QueryListRackInput((int) $request->route('warehouseId'));
+
+        $output = ($queryListRack)($input);
+
+        return new RackCollection($output->racks);
     }
 }
