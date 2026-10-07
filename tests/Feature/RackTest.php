@@ -330,3 +330,137 @@ describe('Rack', function () {
         ],
     ]);
 });
+
+describe('Rack index', function () {
+    beforeEach(function () {
+        $name = 'Name';
+        $email = 'test@test.com';
+        $password = 'password1234';
+
+        $this->user = User::factory()->createOne([
+            'name' => $name,
+            'email' => $email,
+            'password' => $password,
+        ]);
+
+        $warehouseRepository = new WarehouseRepository;
+
+        $this->warehouse = $warehouseRepository->create('Склад 1', 'г. Москва, Ленинские горы, д. 1', '8ed1481e-1f9e-4340-9774-325db197bf5d', 55.702936, 37.530768);
+        $this->warehouseTwo = $warehouseRepository->create('Склад 2', 'г. Москва, ул. Петровка, д. 17', 'b8c9d0e1-f2a3-4b5c-8d9e-0f1a2b3c4d5e', 55.7646600, 37.6162100);
+
+        Rack::create([
+            'warehouse_id' => $this->warehouseTwo->id,
+            'code' => 'C',
+            'levels_count' => 1,
+            'cells_per_level' => 2,
+        ]);
+
+        $this->racksData = [
+            [
+                'code' => 'A',
+                'levels_count' => 2,
+                'cells_per_level' => 3,
+            ],
+            [
+                'code' => 'B',
+                'levels_count' => 1,
+                'cells_per_level' => 2,
+            ],
+        ];
+    });
+
+    it('returns a list of racks and cells', function () {
+        $this->be($this->user)->postJson(route('racks-create', ['warehouseId' => $this->warehouse->id]), [
+            'racks' => $this->racksData,
+        ])->assertCreated();
+
+        $response = $this->be($this->user)->getJson(route('racks-index', ['warehouseId' => $this->warehouse->id]));
+
+        $response->assertStatus(200);
+
+        $response->assertJsonStructure([
+            'data' => [
+                '*' => [
+                    'id',
+                    'code',
+                    'levels_count',
+                    'cells_per_level',
+                    'cells' => [
+                        '*' => [
+                            'id',
+                            'number',
+                            'level',
+                            'position',
+                        ],
+                    ],
+                ],
+            ],
+        ]);
+
+        $responseRacks = collect($response->json('data'))->keyBy('code');
+        $expectedRacks = collect($this->racksData)->keyBy('code');
+
+        expect($responseRacks->keys()->all())->toEqual($expectedRacks->keys()->all());
+
+        $rackIds = collect($response->json('data'))->pluck('id')->all();
+        $expectedRackIds = $rackIds;
+        sort($expectedRackIds);
+
+        expect($rackIds)->toEqual($expectedRackIds);
+
+        foreach ($expectedRacks as $code => $expectedRack) {
+            $actualRack = $responseRacks->get($code);
+
+            $expectedCellsCount =
+                $expectedRack['levels_count']
+                * $expectedRack['cells_per_level'];
+
+            expect($actualRack)->not->toBeNull()
+                ->and($actualRack['levels_count'])->toBe($expectedRack['levels_count'])
+                ->and($actualRack['cells_per_level'])->toBe($expectedRack['cells_per_level'])
+                ->and($actualRack['cells'])->toHaveCount($expectedCellsCount);
+
+            $cells = $actualRack['cells'];
+
+            $cellNumbers = collect($cells)->pluck('number')->all();
+
+            expect($cellNumbers)->toBe(range(1, $expectedCellsCount));
+        }
+    });
+
+    it('returns an empty list when the warehouse has no racks', function () {
+        $response = $this->be($this->user)->getJson(route('racks-index', ['warehouseId' => $this->warehouse->id]));
+
+        $response->assertStatus(200);
+
+        $response->assertJsonCount(0, 'data');
+    });
+
+    it('rejects an unauthenticated request', function () {
+        $response = $this->getJson(route('racks-index', ['warehouseId' => $this->warehouse->id]));
+
+        $response->assertStatus(401);
+
+        $response->assertJson([
+            'message' => 'Unauthenticated.',
+        ]);
+    });
+
+    it('returns 404 for a missing warehouse', function () {
+        $response = $this->be($this->user)->getJson(route('racks-index', ['warehouseId' => $this->warehouse->id + 1000]));
+
+        $response->assertStatus(404)
+            ->assertJson([
+                'message' => 'Склад с передаваемым id не найден',
+            ]);
+    });
+
+    it('returns 404 when the warehouse ID is not numeric', function () {
+        $response = $this->be($this->user)->getJson(route('racks-index', ['warehouseId' => 'asd']));
+
+        $response->assertStatus(404)
+            ->assertJson([
+                'message' => 'Запрашиваемый ресурс или маршрут не найден.',
+            ]);
+    });
+});
