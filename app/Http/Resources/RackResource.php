@@ -21,8 +21,8 @@ class RackResource extends JsonResource
         return [
             'id' => $this->id,
             'code' => $this->code,
-            'levelsCount' => $this->levelsCount,
-            'cellsPerLevel' => $this->cellsPerLevel,
+            'levels_count' => $this->levelsCount,
+            'cells_per_level' => $this->cellsPerLevel,
             'cells' => CellResource::collection($this->cells),
         ];
     }
