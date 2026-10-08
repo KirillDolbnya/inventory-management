@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Cell extends Model
 {
@@ -20,5 +21,13 @@ class Cell extends Model
     public function rack(): BelongsTo
     {
         return $this->belongsTo(Rack::class);
+    }
+
+    /**
+     * @return HasMany<InventoryPlacement, $this>
+     */
+    public function inventoryPlacements(): HasMany
+    {
+        return $this->hasMany(InventoryPlacement::class);
     }
 }

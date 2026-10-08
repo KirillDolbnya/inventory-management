@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\InventoryController;
 use App\Http\Controllers\Api\RackController;
 use App\Http\Controllers\Api\WarehouseController;
 use Illuminate\Support\Facades\Route;
@@ -25,6 +26,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::controller(RackController::class)->group(function () {
             Route::post('{warehouseId}/racks', 'store')->name('racks-create')->where('warehouseId', '[0-9]+');
             Route::get('{warehouseId}/racks', 'index')->name('racks-index')->where('warehouseId', '[0-9]+');
+        });
+    });
+
+    Route::prefix('inventories')->group(function () {
+        Route::controller(InventoryController::class)->group(function () {
+            Route::post('', 'store')->name('inventory-create');
         });
     });
 });
