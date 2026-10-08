@@ -2,11 +2,18 @@
 
 namespace App\Models;
 
+use Database\Factories\InventoryFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Inventory extends Model
 {
+    /**
+     * @use HasFactory<InventoryFactory>
+     */
+    use HasFactory;
+
     protected $fillable = [
         'name',
         'description',
