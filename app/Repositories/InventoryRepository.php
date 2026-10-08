@@ -25,8 +25,26 @@ class InventoryRepository
         ]);
     }
 
-    public function existsByName(string $name): bool
+    /**
+     * @param array{
+     *     name?: string,
+     *     description?: string|null
+     * } $changes
+     */
+    public function update(Inventory $inventory, array $changes): Inventory
     {
-        return Inventory::query()->where('name', $name)->exists();
+        $inventory->update($changes);
+
+        return $inventory;
+    }
+
+    public function getById(int $id): ?Inventory
+    {
+        return Inventory::query()->find($id);
+    }
+
+    public function existsByName(string $name, ?int $id = null): bool
+    {
+        return Inventory::query()->where('name', $name)->when($id !== null, fn ($query) => $query->whereKeyNot($id))->exists();
     }
 }
