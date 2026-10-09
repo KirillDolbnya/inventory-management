@@ -233,3 +233,270 @@ describe('Inventory creation', function () {
         ],
     ]);
 });
+
+describe('Inventory update', function () {
+    beforeEach(function () {
+        $name = 'Name';
+        $email = 'test@test.com';
+        $password = 'password1234';
+
+        $this->user = User::factory()->createOne([
+            'name' => $name,
+            'email' => $email,
+            'password' => $password,
+        ]);
+
+        $this->inventory = Inventory::factory()->create([
+            'name' => 'Название',
+            'description' => 'Какое-то описание',
+            'quantity' => 1,
+        ]);
+    });
+
+    it('updates the inventory name and description', function () {
+        $response = $this->be($this->user)->patchJson(route('inventory-update', $this->inventory->id), [
+            'name' => 'Гвозди',
+            'description' => 'Какое-то описание',
+        ]);
+
+        $response->assertStatus(200);
+
+        $response->assertJson([
+            'id' => $this->inventory->id,
+            'name' => 'Гвозди',
+            'description' => 'Какое-то описание',
+            'quantity' => $this->inventory->quantity,
+        ]);
+
+        assertDatabaseHas('inventories', [
+            'id' => $this->inventory->id,
+            'name' => 'Гвозди',
+            'description' => 'Какое-то описание',
+            'quantity' => $this->inventory->quantity,
+        ]);
+    });
+
+    it('does not persist an update when submitted values are unchanged', function () {
+        $originalUpdatedAt = $this->inventory->updated_at->toIso8601String();
+
+        $this->travel(5)->minute();
+
+        $response = $this->be($this->user)->patchJson(route('inventory-update', $this->inventory->id), [
+            'name' => $this->inventory->name,
+            'description' => $this->inventory->description,
+        ]);
+
+        $response->assertStatus(200);
+
+        $response->assertJson([
+            'id' => $this->inventory->id,
+            'name' => $this->inventory->name,
+            'description' => $this->inventory->description,
+            'quantity' => $this->inventory->quantity,
+        ]);
+
+        assertDatabaseHas('inventories', [
+            'id' => $this->inventory->id,
+            'name' => $this->inventory->name,
+            'description' => $this->inventory->description,
+            'quantity' => $this->inventory->quantity,
+        ]);
+
+        $this->inventory->refresh();
+
+        expect($this->inventory->updated_at->toIso8601String())->toBe($originalUpdatedAt);
+    });
+
+    it('updates only the inventory name', function () {
+        $response = $this->be($this->user)->patchJson(route('inventory-update', $this->inventory->id), [
+            'name' => 'Гвозди',
+        ]);
+
+        $response->assertStatus(200);
+
+        $response->assertJson([
+            'id' => $this->inventory->id,
+            'name' => 'Гвозди',
+            'description' => $this->inventory->description,
+            'quantity' => $this->inventory->quantity,
+        ]);
+
+        assertDatabaseHas('inventories', [
+            'id' => $this->inventory->id,
+            'name' => 'Гвозди',
+            'description' => $this->inventory->description,
+            'quantity' => $this->inventory->quantity,
+        ]);
+    });
+
+    it('updates only the inventory description', function () {
+        $response = $this->be($this->user)->patchJson(route('inventory-update', $this->inventory->id), [
+            'description' => 'Какое-то описание',
+        ]);
+
+        $response->assertStatus(200);
+
+        $response->assertJson([
+            'id' => $this->inventory->id,
+            'name' => $this->inventory->name,
+            'description' => 'Какое-то описание',
+            'quantity' => $this->inventory->quantity,
+        ]);
+
+        assertDatabaseHas('inventories', [
+            'id' => $this->inventory->id,
+            'name' => $this->inventory->name,
+            'description' => 'Какое-то описание',
+            'quantity' => $this->inventory->quantity,
+        ]);
+    });
+
+    it('clears the inventory description when null is provided', function () {
+        $response = $this->be($this->user)->patchJson(route('inventory-update', $this->inventory->id), [
+            'description' => null,
+        ]);
+
+        $response->assertStatus(200);
+
+        $response->assertJson([
+            'id' => $this->inventory->id,
+            'name' => $this->inventory->name,
+            'description' => null,
+            'quantity' => $this->inventory->quantity,
+        ]);
+
+        assertDatabaseHas('inventories', [
+            'id' => $this->inventory->id,
+            'name' => $this->inventory->name,
+            'description' => null,
+            'quantity' => $this->inventory->quantity,
+        ]);
+    });
+
+    it('rejects a request without update fields', function () {
+        $originalUpdatedAt = $this->inventory->updated_at->toIso8601String();
+
+        $this->travel(5)->minute();
+
+        $response = $this->be($this->user)->patchJson(route('inventory-update', $this->inventory->id), []);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors([
+                'request' => 'Должно быть передано хотя бы одно поле',
+            ]);
+
+        assertDatabaseHas('inventories', [
+            'id' => $this->inventory->id,
+            'name' => $this->inventory->name,
+            'description' => $this->inventory->description,
+            'quantity' => $this->inventory->quantity,
+        ]);
+
+        $this->inventory->refresh();
+
+        expect($this->inventory->updated_at->toIso8601String())->toBe($originalUpdatedAt);
+    });
+
+    it('rejects an unauthenticated request', function () {
+        $response = $this->patchJson(route('inventory-update', $this->inventory->id), [
+            'name' => 'Гвозди',
+            'description' => null,
+        ]);
+
+        $response->assertStatus(401);
+
+        $response->assertJson([
+            'message' => 'Unauthenticated.',
+        ]);
+
+        assertDatabaseHas('inventories', [
+            'id' => $this->inventory->id,
+            'name' => $this->inventory->name,
+            'description' => $this->inventory->description,
+            'quantity' => $this->inventory->quantity,
+        ]);
+    });
+
+    it('rejects a duplicate inventory name without applying other changes', function () {
+        $existingInventoryName = 'Пила';
+        Inventory::factory()->create([
+            'name' => $existingInventoryName,
+        ]);
+
+        $response = $this->be($this->user)->patchJson(route('inventory-update', $this->inventory->id), [
+            'name' => $existingInventoryName,
+            'description' => null,
+        ]);
+
+        $response->assertStatus(422);
+
+        $response->assertJson([
+            'message' => 'Название предмета уже занято',
+            'errors' => [
+                'name' => ['Название предмета уже занято'],
+            ],
+        ]);
+
+        assertDatabaseHas('inventories', [
+            'id' => $this->inventory->id,
+            'name' => $this->inventory->name,
+            'description' => $this->inventory->description,
+            'quantity' => $this->inventory->quantity,
+        ]);
+    });
+
+    it('returns not found for a nonexistent inventory', function () {
+        $response = $this->be($this->user)->patchJson(route('inventory-update', $this->inventory->id + 1000), [
+            'name' => 'Гвозди',
+            'description' => null,
+        ]);
+
+        $response->assertStatus(404);
+
+        $response->assertJson([
+            'message' => 'Предмет с переданным id не найден',
+        ]);
+    });
+
+    it('rejects invalid inventory update data', function (array $payload, string $errorKey, string $expectedMessage) {
+        $response = $this->be($this->user)->patchJson(route('inventory-update', $this->inventory->id), $payload);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors([
+                $errorKey => $expectedMessage,
+            ]);
+
+        assertDatabaseHas('inventories', [
+            'id' => $this->inventory->id,
+            'name' => $this->inventory->name,
+            'description' => $this->inventory->description,
+            'quantity' => $this->inventory->quantity,
+        ]);
+    })->with([
+        'name is null' => [
+            ['name' => null],
+            'name',
+            'Наименование предмета должно быть строкой.',
+        ],
+        'name is not a string' => [
+            ['name' => 12345],
+            'name',
+            'Наименование предмета должно быть строкой.',
+        ],
+        'name exceeds max length' => [
+            ['name' => str_repeat('A', 256)],
+            'name',
+            'Наименование предмета не должно превышать 255 символов.',
+        ],
+        'description is not a string' => [
+            ['description' => 12345],
+            'description',
+            'Дополнительное описание должно быть строкой.',
+        ],
+        'description exceeds max length' => [
+            ['description' => str_repeat('B', 256)],
+            'description',
+            'Дополнительное описание не должно превышать 255 символов.',
+        ],
+    ]);
+});
