@@ -45,7 +45,7 @@ class InventoryRepository
 
     public function getByIdWithPlacements(int $id): ?Inventory
     {
-        return Inventory::query()->with('inventoryPlacements')->find($id);
+        return Inventory::query()->with('inventoryPlacements', fn ($query) => $query->orderBy('id', 'asc'))->find($id);
     }
 
     public function existsByName(string $name, ?int $id = null): bool
