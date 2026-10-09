@@ -32,6 +32,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('inventories')->group(function () {
         Route::controller(InventoryController::class)->group(function () {
             Route::post('', 'store')->name('inventory-create');
+            Route::get('', 'index')->name('inventory-index');
             Route::patch('{inventoryId}', 'update')->name('inventory-update')->where('inventoryId', '[0-9]+');
             Route::get('{inventoryId}', 'show')->name('inventory-show')->where('inventoryId', '[0-9]+');
         });

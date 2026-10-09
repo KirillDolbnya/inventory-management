@@ -4,6 +4,7 @@ namespace App\Repositories;
 
 use App\Models\Inventory;
 use App\Models\InventoryPlacement;
+use Illuminate\Support\Collection;
 
 class InventoryRepository
 {
@@ -46,6 +47,19 @@ class InventoryRepository
     public function getByIdWithPlacements(int $id): ?Inventory
     {
         return Inventory::query()->with('inventoryPlacements', fn ($query) => $query->orderBy('id', 'asc'))->find($id);
+    }
+
+    /**
+     * @return Collection<int, Inventory>
+     */
+    public function getAllWithPlacements(): Collection
+    {
+        return Inventory::query()
+            ->with([
+                'inventoryPlacements' => fn ($query) => $query->orderBy('id', 'asc'),
+                'inventoryPlacements.cell.rack.warehouse',
+            ])
+            ->orderBy('id', 'asc')->get();
     }
 
     public function existsByName(string $name, ?int $id = null): bool

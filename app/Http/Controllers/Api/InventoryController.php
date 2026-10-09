@@ -13,6 +13,9 @@ use App\UseCases\Inventory\Create\CreateInventoryInput;
 use App\UseCases\Inventory\QueryDetail\QueryDetailInventory;
 use App\UseCases\Inventory\QueryDetail\QueryDetailInventoryInput;
 use App\UseCases\Inventory\QueryDetail\QueryDetailInventoryPlacementOutput;
+use App\UseCases\Inventory\QueryList\QueryListInventory;
+use App\UseCases\Inventory\QueryList\QueryListInventoryItemOutput;
+use App\UseCases\Inventory\QueryList\QueryListInventoryPlacementOutput;
 use App\UseCases\Inventory\Update\UpdateInventory;
 use App\UseCases\Inventory\Update\UpdateInventoryInput;
 use Dedoc\Scramble\Attributes\Response as ScrambleResponse;
@@ -112,6 +115,42 @@ class InventoryController extends Controller
                 'cell_id' => $placement->cellId,
                 'quantity' => $placement->quantity,
             ], $output->placements),
+        ]);
+    }
+
+    public function index(QueryListInventory $queryListInventory): JsonResponse
+    {
+        $output = ($queryListInventory)();
+
+        $outputData = array_map(fn (QueryListInventoryItemOutput $item) => [
+            'id' => $item->id,
+            'name' => $item->name,
+            'description' => $item->description,
+            'quantity' => $item->quantity,
+            'placed_quantity' => $item->placedQuantity,
+            'unplaced_quantity' => $item->unplacedQuantity,
+            'placements' => array_map(fn (QueryListInventoryPlacementOutput $placement) => [
+                'id' => $placement->id,
+                'quantity' => $placement->quantity,
+                'warehouse' => [
+                    'id' => $placement->location->warehouseId,
+                    'name' => $placement->location->warehouseName,
+                ],
+                'rack' => [
+                    'id' => $placement->location->rackId,
+                    'code' => $placement->location->rackCode,
+                ],
+                'cell' => [
+                    'id' => $placement->location->cellId,
+                    'number' => $placement->location->cellNumber,
+                    'level' => $placement->location->cellLevel,
+                    'position' => $placement->location->cellPosition,
+                ],
+            ], $item->placements),
+        ], $output->items);
+
+        return response()->json([
+            'data' => $outputData,
         ]);
     }
 }
