@@ -2,6 +2,7 @@
 
 use App\Models\Cell;
 use App\Models\Inventory;
+use App\Models\InventoryPlacement;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -499,4 +500,138 @@ describe('Inventory update', function () {
             'Дополнительное описание не должно превышать 255 символов.',
         ],
     ]);
+});
+
+describe('Inventory show', function () {
+    beforeEach(function () {
+        $name = 'Name';
+        $email = 'test@test.com';
+        $password = 'password1234';
+
+        $this->user = User::factory()->createOne([
+            'name' => $name,
+            'email' => $email,
+            'password' => $password,
+        ]);
+
+        $this->inventory = Inventory::factory()->create([
+            'name' => 'Название',
+            'description' => 'Какое-то описание',
+            'quantity' => 3,
+        ]);
+
+        $this->inventoryPlacement = InventoryPlacement::factory()->create([
+            'inventory_id' => $this->inventory->id,
+            'quantity' => 1,
+        ]);
+    });
+
+    it('shows inventory with its placement', function () {
+        $response = $this->be($this->user)->getJson(route('inventory-show', $this->inventory->id));
+
+        $response->assertStatus(200);
+
+        $response->assertJson([
+            'id' => $this->inventory->id,
+            'name' => $this->inventory->name,
+            'description' => $this->inventory->description,
+            'quantity' => $this->inventory->quantity,
+            'placements' => [
+                [
+                    'id' => $this->inventoryPlacement->id,
+                    'cell_id' => $this->inventoryPlacement->cell_id,
+                    'quantity' => $this->inventoryPlacement->quantity,
+                ],
+            ],
+        ]);
+
+        $response->assertJsonCount(1, 'placements');
+
+        assertDatabaseHas('inventories', [
+            'id' => $this->inventory->id,
+            'name' => $this->inventory->name,
+            'description' => $this->inventory->description,
+            'quantity' => $this->inventory->quantity,
+        ]);
+
+        assertDatabaseHas('inventory_placements', [
+            'id' => $this->inventoryPlacement->id,
+            'inventory_id' => $this->inventory->id,
+            'cell_id' => $this->inventoryPlacement->cell_id,
+            'quantity' => $this->inventoryPlacement->quantity,
+        ]);
+    });
+
+    it('shows inventory with multiple placements', function () {
+        $secondPlacement = InventoryPlacement::factory()->create([
+            'inventory_id' => $this->inventory->id,
+            'quantity' => 1,
+        ]);
+
+        $response = $this->be($this->user)->getJson(route('inventory-show', $this->inventory->id));
+
+        $response->assertStatus(200);
+
+        $response->assertJson([
+            'id' => $this->inventory->id,
+            'name' => $this->inventory->name,
+            'description' => $this->inventory->description,
+            'quantity' => $this->inventory->quantity,
+            'placements' => [
+                [
+                    'id' => $this->inventoryPlacement->id,
+                    'cell_id' => $this->inventoryPlacement->cell_id,
+                    'quantity' => $this->inventoryPlacement->quantity,
+                ],
+                [
+                    'id' => $secondPlacement->id,
+                    'cell_id' => $secondPlacement->cell_id,
+                    'quantity' => $secondPlacement->quantity,
+                ],
+            ],
+        ]);
+
+        $response->assertJsonCount(2, 'placements');
+    });
+
+    it('shows inventory without placements', function () {
+        $inventory = Inventory::factory()->create([
+            'name' => 'Клюшка',
+            'description' => null,
+        ]);
+
+        $response = $this->be($this->user)->getJson(route('inventory-show', $inventory->id));
+
+        $response->assertStatus(200);
+
+        $response->assertJson([
+            'id' => $inventory->id,
+            'name' => $inventory->name,
+            'description' => null,
+            'quantity' => $inventory->quantity,
+            'placements' => [],
+        ]);
+
+        $response->assertJsonCount(0, 'placements');
+    });
+
+    it('rejects an unauthenticated request', function () {
+        $response = $this->getJson(route('inventory-show', $this->inventory->id));
+
+        $response->assertStatus(401);
+
+        $response->assertJson([
+            'message' => 'Unauthenticated.',
+        ]);
+    });
+
+    it('returns not found for a nonexistent inventory', function () {
+        $response = $this->be($this->user)->getJson(route('inventory-show', $this->inventory->id + 1000));
+
+        $response->assertStatus(404);
+
+        $response->assertJson([
+            'message' => 'Предмет с переданным id не найден',
+        ]);
+    });
 });
