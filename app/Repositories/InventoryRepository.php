@@ -89,7 +89,7 @@ class InventoryRepository
                 'inventoryPlacements', fn ($query) => $query->where('cell_id', $cellId)
             )
             ->with([
-                'inventoryPlacements' => fn ($query) => $query->where('cell_id', $cellId)
+                'inventoryPlacements' => fn ($query) => $query->where('cell_id', $cellId),
             ])
             ->orderBy('id', 'asc')->get();
     }
