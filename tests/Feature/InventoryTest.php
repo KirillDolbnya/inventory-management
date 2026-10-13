@@ -1032,3 +1032,140 @@ describe('Inventory by warehouse index', function () {
         ]);
     });
 });
+
+describe('Inventory by cell index', function () {
+    beforeEach(function () {
+        $name = 'Name';
+        $email = 'test@test.com';
+        $password = 'password1234';
+
+        $this->user = User::factory()->createOne([
+            'name' => $name,
+            'email' => $email,
+            'password' => $password,
+        ]);
+
+        $this->cell = Cell::factory()->create();
+    });
+
+    it('returns inventories placed in the requested cell', function () {
+        $inventory = Inventory::factory()->create([
+            'name' => 'Гвозди',
+            'description' => 'Описание',
+            'quantity' => 5,
+        ]);
+
+        $inventoryPlacement = InventoryPlacement::factory()->create([
+            'inventory_id' => $inventory->id,
+            'cell_id' => $this->cell->id,
+            'quantity' => 3,
+        ]);
+
+        InventoryPlacement::factory()->create([
+            'inventory_id' => $inventory->id,
+            'quantity' => 2,
+        ]);
+
+        $inventory2 = Inventory::factory()->create([
+            'quantity' => 5,
+        ]);
+
+        InventoryPlacement::factory()->create([
+            'inventory_id' => $inventory2->id,
+        ]);
+
+        $response = $this->be($this->user)->getJson(route('cell-inventories-index', $this->cell->id));
+
+        $response->assertStatus(200);
+
+        $response->assertJsonStructure([
+            'data' => [
+                '*' => [
+                    'id',
+                    'name',
+                    'description',
+                    'quantity',
+                    'quantity_in_cell',
+                    'placement_id',
+                ],
+            ],
+        ]);
+
+        $response->assertJsonCount(1, 'data');
+
+        $response->assertJsonMissing([
+            'id' => $inventory2->id,
+        ]);
+
+        $responseData = collect($response->json('data'));
+        $actualInventory = $responseData->where('id', $inventory->id)->first();
+
+        expect($actualInventory['id'])->toBe($inventory->id)
+            ->and($actualInventory['name'])->toBe($inventory->name)
+            ->and($actualInventory['description'])->toBe($inventory->description)
+            ->and($actualInventory['quantity'])->toBe($inventory->quantity)
+            ->and($actualInventory['quantity_in_cell'])->toBe($inventoryPlacement->quantity)
+            ->and($actualInventory['placement_id'])->toBe($inventoryPlacement->id);
+    });
+
+    it('returns inventories ordered by id ascending', function () {
+        $inventories = Inventory::factory()->count(2)->create([
+            'quantity' => 5,
+        ]);
+
+        $inventories->each(fn (Inventory $inventory) => InventoryPlacement::factory()->create([
+            'inventory_id' => $inventory->id,
+            'cell_id' => $this->cell->id,
+            'quantity' => 2,
+        ])
+        );
+
+        $response = $this->be($this->user)->getJson(route('cell-inventories-index', $this->cell->id));
+
+        $response->assertStatus(200);
+
+        $responseData = collect($response->json('data'));
+        $actualInventoryIds = $responseData->pluck('id')->all();
+        $expectedInventoryIds = $inventories->pluck('id')->sort()->values()->all();
+
+        expect($actualInventoryIds)->toBe($expectedInventoryIds);
+    });
+
+    it('excludes inventory placed only in another cell', function () {
+        $inventory = Inventory::factory()->create([
+            'name' => 'Гвозди',
+            'description' => 'Описание',
+            'quantity' => 1,
+        ]);
+
+        InventoryPlacement::factory()->create([
+            'inventory_id' => $inventory->id,
+        ]);
+
+        $response = $this->be($this->user)->getJson(route('cell-inventories-index', $this->cell->id));
+
+        $response->assertStatus(200);
+
+        $response->assertJsonCount(0, 'data');
+    });
+
+    it('returns not found when the cell does not exist', function () {
+        $response = $this->be($this->user)->getJson(route('cell-inventories-index', $this->cell->id + 1000));
+
+        $response->assertStatus(404);
+
+        $response->assertJson([
+            'message' => 'Ячейка с переданным id не найдена',
+        ]);
+    });
+
+    it('rejects an unauthenticated request', function () {
+        $response = $this->getJson(route('cell-inventories-index', $this->cell->id));
+
+        $response->assertStatus(401);
+
+        $response->assertJson([
+            'message' => 'Unauthenticated.',
+        ]);
+    });
+});
