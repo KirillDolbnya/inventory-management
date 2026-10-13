@@ -152,6 +152,29 @@ class WarehouseController extends Controller
         ], $output->items);
 
         return response()->json([
+            /**
+             * @var list<array{
+             *     id: int,
+             *     name: string,
+             *     description: string|null,
+             *     quantity: int,
+             *     quantity_in_warehouse: int,
+             *     placements: list<array{
+             *         id: int,
+             *         quantity: int,
+             *         rack: array{
+             *             id: int,
+             *             code: string
+             *         },
+             *         cell: array{
+             *             id: int,
+             *             number: int,
+             *             level: int,
+             *             position: int
+             *         }
+             *     }>
+             * }>
+             */
             'data' => $outputData,
         ]);
     }

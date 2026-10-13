@@ -110,6 +110,13 @@ class InventoryController extends Controller
             'name' => $output->name,
             'description' => $output->description,
             'quantity' => $output->quantity,
+            /**
+             * @var list<array{
+             *     id: int,
+             *     cell_id: int,
+             *     quantity: int
+             * }>
+             */
             'placements' => array_map(fn (QueryDetailInventoryPlacementOutput $placement) => [
                 'id' => $placement->id,
                 'cell_id' => $placement->cellId,
@@ -150,6 +157,34 @@ class InventoryController extends Controller
         ], $output->items);
 
         return response()->json([
+            /**
+             * @var list<array{
+             *     id: int,
+             *     name: string,
+             *     description: string|null,
+             *     quantity: int,
+             *     placed_quantity: int,
+             *     unplaced_quantity: int,
+             *     placements: list<array{
+             *         id: int,
+             *         quantity: int,
+             *         warehouse: array{
+             *             id: int,
+             *             name: string
+             *         },
+             *         rack: array{
+             *             id: int,
+             *             code: string
+             *         },
+             *         cell: array{
+             *             id: int,
+             *             number: int,
+             *             level: int,
+             *             position: int
+             *         }
+             *     }>
+             * }>
+             */
             'data' => $outputData,
         ]);
     }

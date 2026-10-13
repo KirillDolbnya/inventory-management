@@ -37,6 +37,16 @@ class CellController extends Controller
         ], $output->items);
 
         return response()->json([
+            /**
+             * @var list<array{
+             *     id: int,
+             *     name: string,
+             *     description: string|null,
+             *     quantity: int,
+             *     quantity_in_cell: int,
+             *     placement_id: int
+             * }>
+             */
             'data' => $outputData,
         ]);
     }
