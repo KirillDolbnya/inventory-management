@@ -1,0 +1,101 @@
+<?php
+
+namespace App\Repositories;
+
+use App\Models\Inventory;
+use App\Models\InventoryPlacement;
+use Illuminate\Support\Collection;
+
+class InventoryRepository
+{
+    public function create(string $name, ?string $description, int $quantity): Inventory
+    {
+        return Inventory::query()->create([
+            'name' => $name,
+            'description' => $description,
+            'quantity' => $quantity,
+        ]);
+    }
+
+    public function assignToCell(int $cellId, Inventory $inventory): void
+    {
+        InventoryPlacement::query()->create([
+            'inventory_id' => $inventory->id,
+            'cell_id' => $cellId,
+            'quantity' => $inventory->quantity,
+        ]);
+    }
+
+    /**
+     * @param array{
+     *     name?: string,
+     *     description?: string|null
+     * } $changes
+     */
+    public function update(Inventory $inventory, array $changes): Inventory
+    {
+        $inventory->update($changes);
+
+        return $inventory;
+    }
+
+    public function getById(int $id): ?Inventory
+    {
+        return Inventory::query()->find($id);
+    }
+
+    public function getByIdWithPlacements(int $id): ?Inventory
+    {
+        return Inventory::query()->with('inventoryPlacements', fn ($query) => $query->orderBy('id', 'asc'))->find($id);
+    }
+
+    /**
+     * @return Collection<int, Inventory>
+     */
+    public function getAllWithPlacements(): Collection
+    {
+        return Inventory::query()
+            ->with([
+                'inventoryPlacements' => fn ($query) => $query->orderBy('id', 'asc'),
+                'inventoryPlacements.cell.rack.warehouse',
+            ])
+            ->orderBy('id', 'asc')->get();
+    }
+
+    /**
+     * @return Collection<int, Inventory>
+     */
+    public function getAllByWarehouse(int $warehouseId): Collection
+    {
+        return Inventory::query()
+            ->whereHas(
+                'inventoryPlacements.cell.rack', fn ($query) => $query->where('warehouse_id', $warehouseId)
+            )
+            ->with([
+                'inventoryPlacements' => fn ($query) => $query->whereHas('cell.rack', fn ($query) => $query->where('warehouse_id', $warehouseId))
+                    ->orderBy('id', 'asc'),
+                'inventoryPlacements.cell.rack',
+            ])
+            ->orderBy('id', 'asc')->get();
+    }
+
+    /**
+     * @return Collection<int, Inventory>
+     */
+    public function getAllByCell(int $cellId): Collection
+    {
+        return Inventory::query()
+            ->whereHas(
+                'inventoryPlacements', fn ($query) => $query->where('cell_id', $cellId)
+            )
+            ->with([
+                'inventoryPlacements' => fn ($query) => $query->where('cell_id', $cellId),
+            ])
+            ->orderBy('id', 'asc')->get();
+    }
+
+    public function existsByName(string $name, ?int $id = null): bool
+    {
+        return Inventory::query()->where('name', $name)->when($id !== null, fn ($query) => $query->whereKeyNot($id))->exists();
+    }
+}

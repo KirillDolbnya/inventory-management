@@ -2,12 +2,25 @@
 
 namespace App\Models;
 
+use Database\Factories\RackFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Rack extends Model
 {
+    /**
+     * @use HasFactory<RackFactory>
+     */
+    use HasFactory;
+
+    protected $casts = [
+        'warehouse_id' => 'integer',
+        'levels_count' => 'integer',
+        'cells_per_level' => 'integer',
+    ];
+
     protected $fillable = [
         'code',
         'warehouse_id',
