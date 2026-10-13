@@ -3,7 +3,9 @@
 use App\Models\Cell;
 use App\Models\Inventory;
 use App\Models\InventoryPlacement;
+use App\Models\Rack;
 use App\Models\User;
+use App\Models\Warehouse;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 use function Pest\Laravel\assertDatabaseCount;
@@ -855,6 +857,182 @@ describe('Inventory index', function () {
 
     it('rejects an unauthenticated request', function () {
         $response = $this->getJson(route('inventory-index'));
+
+        $response->assertStatus(401);
+
+        $response->assertJson([
+            'message' => 'Unauthenticated.',
+        ]);
+    });
+});
+
+describe('Inventory by warehouse index', function () {
+    beforeEach(function () {
+        $name = 'Name';
+        $email = 'test@test.com';
+        $password = 'password1234';
+
+        $this->user = User::factory()->createOne([
+            'name' => $name,
+            'email' => $email,
+            'password' => $password,
+        ]);
+
+        $this->warehouse = Warehouse::factory()->create();
+    });
+
+    it('returns inventories with placement quantities and locations', function () {
+        $rack1 = Rack::factory()->create([
+            'warehouse_id' => $this->warehouse->id,
+        ]);
+        $rack2 = Rack::factory()->create([
+            'warehouse_id' => $this->warehouse->id,
+        ]);
+        $cell1 = Cell::factory()->create([
+            'rack_id' => $rack1->id,
+        ]);
+        $cell2 = Cell::factory()->create([
+            'rack_id' => $rack2->id,
+        ]);
+
+        $inventory = Inventory::factory()->create([
+            'name' => 'Гвозди',
+            'description' => 'Описание',
+            'quantity' => 10,
+        ]);
+
+        $mainPlacements = collect([$cell1, $cell2])->map(fn (Cell $cell) => InventoryPlacement::factory()->create([
+            'inventory_id' => $inventory->id,
+            'cell_id' => $cell->id,
+            'quantity' => 2,
+        ])
+        );
+
+        $anotherPlacement = InventoryPlacement::factory()->create([
+            'inventory_id' => $inventory->id,
+            'quantity' => 3,
+        ]);
+
+        $response = $this->be($this->user)->getJson(route('warehouses-inventories-index', $this->warehouse->id));
+
+        $response->assertStatus(200);
+
+        $response->assertJsonCount(1, 'data');
+
+        $response->assertJsonStructure([
+            'data' => [
+                '*' => [
+                    'id',
+                    'name',
+                    'description',
+                    'quantity',
+                    'quantity_in_warehouse',
+                    'placements' => [
+                        '*' => [
+                            'id',
+                            'quantity',
+
+                            'rack' => ['id', 'code'],
+                            'cell' => ['id', 'number', 'level', 'position'],
+                        ],
+                    ],
+                ],
+            ],
+        ]);
+
+        $response->assertJsonMissingPath('data.*.placements.*.warehouse');
+
+        $quantityInWarehouse = $mainPlacements->sum('quantity');
+        $mainPlacementIds = $mainPlacements->pluck('id')->all();
+        $mainPlacementQuantities = $mainPlacements->pluck('quantity')->all();
+
+        $responseData = collect($response->json('data'));
+        $actualInventory = $responseData->where('id', $inventory->id)->first();
+        $actualPlacementIds = collect($actualInventory['placements'])->pluck('id')->all();
+        $actualRackIds = collect($actualInventory['placements'])->pluck('rack.id')->all();
+        $actualRackCodes = collect($actualInventory['placements'])->pluck('rack.code')->all();
+        $actualCellIds = collect($actualInventory['placements'])->pluck('cell.id')->all();
+        $actualCellNumbers = collect($actualInventory['placements'])->pluck('cell.number')->all();
+        $actualCellLevels = collect($actualInventory['placements'])->pluck('cell.level')->all();
+        $actualCellPositions = collect($actualInventory['placements'])->pluck('cell.position')->all();
+        $actualPlacementQuantities = collect($actualInventory['placements'])->pluck('quantity')->all();
+
+        expect($actualInventory['quantity_in_warehouse'])->toBe($quantityInWarehouse)
+            ->and($actualInventory['name'])->toBe($inventory->name)
+            ->and($actualInventory['description'])->toBe($inventory->description)
+            ->and($actualInventory['quantity'])->toBe($inventory->quantity)
+            ->and($actualInventory['placements'])->toHaveCount($mainPlacements->count())
+            ->and($actualPlacementIds)->toBe($mainPlacementIds)
+            ->and($actualPlacementIds)->not->toContain($anotherPlacement->id)
+            ->and($actualPlacementQuantities)->toBe($mainPlacementQuantities)
+            ->and($actualRackIds)->toBe([$rack1->id, $rack2->id])
+            ->and($actualRackCodes)->toBe([$rack1->code, $rack2->code])
+            ->and($actualCellIds)->toBe([$cell1->id, $cell2->id])
+            ->and($actualCellNumbers)->toBe([$cell1->number, $cell2->number])
+            ->and($actualCellLevels)->toBe([$cell1->level, $cell2->level])
+            ->and($actualCellPositions)->toBe([$cell1->position, $cell2->position]);
+    });
+
+    it('returns inventories ordered by id', function () {
+        $inventories = Inventory::factory()
+            ->count(2)
+            ->has(
+                InventoryPlacement::factory()->state([
+                    'cell_id' => Cell::factory()->state([
+                        'rack_id' => Rack::factory()->state(['warehouse_id' => $this->warehouse->id]),
+                    ]),
+                    'quantity' => 5,
+                ]),
+                'inventoryPlacements'
+            )
+            ->create([
+                'quantity' => 5,
+            ]);
+
+        $expectedInventoryIds = $inventories->pluck('id')->sort()->values()->all();
+
+        $response = $this->be($this->user)->getJson(route('warehouses-inventories-index', $this->warehouse->id));
+
+        $response->assertStatus(200);
+
+        $response->assertJsonCount(2, 'data');
+
+        $responseData = collect($response->json('data'));
+        $actualInventoryIds = $responseData->pluck('id')->all();
+
+        expect($actualInventoryIds)->toBe($expectedInventoryIds);
+    });
+
+    it('excludes inventory placed only in another warehouse', function () {
+        $inventory = Inventory::factory()->create([
+            'name' => 'Гвозди',
+            'description' => 'Описание',
+            'quantity' => 1,
+        ]);
+
+        InventoryPlacement::factory()->create([
+            'inventory_id' => $inventory->id,
+        ]);
+
+        $response = $this->be($this->user)->getJson(route('warehouses-inventories-index', $this->warehouse->id));
+
+        $response->assertStatus(200);
+
+        $response->assertJsonCount(0, 'data');
+    });
+
+    it('returns not found when the warehouse does not exist', function () {
+        $response = $this->be($this->user)->getJson(route('warehouses-inventories-index', $this->warehouse->id + 1000));
+
+        $response->assertStatus(404);
+
+        $response->assertJson([
+            'message' => 'Склад с передаваемым id не найден',
+        ]);
+    });
+
+    it('rejects an unauthenticated request', function () {
+        $response = $this->getJson(route('warehouses-inventories-index', $this->warehouse->id));
 
         $response->assertStatus(401);
 
