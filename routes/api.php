@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CellController;
 use App\Http\Controllers\Api\InventoryController;
 use App\Http\Controllers\Api\RackController;
 use App\Http\Controllers\Api\WarehouseController;
@@ -36,6 +37,12 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('', 'index')->name('inventory-index');
             Route::patch('{inventoryId}', 'update')->name('inventory-update')->where('inventoryId', '[0-9]+');
             Route::get('{inventoryId}', 'show')->name('inventory-show')->where('inventoryId', '[0-9]+');
+        });
+    });
+
+    Route::prefix('cells')->group(function () {
+        Route::controller(CellController::class)->group(function () {
+            Route::get('{cellId}/inventories', 'inventories')->name('cell-inventories-index')->where('cellId', '[0-9]+');
         });
     });
 });

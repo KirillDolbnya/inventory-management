@@ -79,6 +79,21 @@ class InventoryRepository
             ->orderBy('id', 'asc')->get();
     }
 
+    /**
+     * @return Collection<int, Inventory>
+     */
+    public function getAllByCell(int $cellId): Collection
+    {
+        return Inventory::query()
+            ->whereHas(
+                'inventoryPlacements', fn ($query) => $query->where('cell_id', $cellId)
+            )
+            ->with([
+                'inventoryPlacements' => fn ($query) => $query->where('cell_id', $cellId)
+            ])
+            ->orderBy('id', 'asc')->get();
+    }
+
     public function existsByName(string $name, ?int $id = null): bool
     {
         return Inventory::query()->where('name', $name)->when($id !== null, fn ($query) => $query->whereKeyNot($id))->exists();
