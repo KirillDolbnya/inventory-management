@@ -62,6 +62,23 @@ class InventoryRepository
             ->orderBy('id', 'asc')->get();
     }
 
+    /**
+     * @return Collection<int, Inventory>
+     */
+    public function getAllByWarehouse(int $warehouseId): Collection
+    {
+        return Inventory::query()
+            ->whereHas(
+                'inventoryPlacements.cell.rack', fn ($query) => $query->where('warehouse_id', $warehouseId)
+            )
+            ->with([
+                'inventoryPlacements' => fn ($query) => $query->whereHas('cell.rack', fn ($query) => $query->where('warehouse_id', $warehouseId))
+                    ->orderBy('id', 'asc'),
+                'inventoryPlacements.cell.rack',
+            ])
+            ->orderBy('id', 'asc')->get();
+    }
+
     public function existsByName(string $name, ?int $id = null): bool
     {
         return Inventory::query()->where('name', $name)->when($id !== null, fn ($query) => $query->whereKeyNot($id))->exists();
