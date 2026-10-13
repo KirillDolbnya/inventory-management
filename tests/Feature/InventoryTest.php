@@ -692,40 +692,38 @@ describe('Inventory index', function () {
             ],
         ]);
 
-        $inventory->refresh();
+        $expectedPlacementIds = $inventoryPlacements->pluck('id')->sort()->values()->all();
+        $inventoryPlacedQuantity = $inventoryPlacements->sum('quantity');
+        $inventoryUnplacedQuantity = $inventory->quantity - $inventoryPlacedQuantity;
 
         $responseData = collect($response->json('data'));
         $actualInventory = $responseData->where('id', $inventory->id)->first();
-        $inventoryPlacedQuantity = $inventory->inventoryPlacements->sum('quantity');
-        $inventoryUnplacedQuantity = $inventory->quantity - $inventoryPlacedQuantity;
+        $actualPlacementIds = collect($actualInventory['placements'])->pluck('id')->all();
 
-        expect($inventoryPlacedQuantity)->toBe($actualInventory['placed_quantity'])
-            ->and($inventoryUnplacedQuantity)->toBe($actualInventory['unplaced_quantity'])
-            ->and($inventory->name)->toBe($actualInventory['name'])
-            ->and($inventory->description)->toBe($actualInventory['description'])
-            ->and($inventory->quantity)->toBe($actualInventory['quantity'])
-            ->and($actualInventory['placements'])->toHaveCount(2);
+        expect($actualInventory['name'])->toBe($inventory->name)
+            ->and($actualInventory['description'])->toBe($inventory->description)
+            ->and($actualInventory['quantity'])->toBe($inventory->quantity)
+            ->and($actualInventory['placed_quantity'])->toBe($inventoryPlacedQuantity)
+            ->and($actualInventory['unplaced_quantity'])->toBe($inventoryUnplacedQuantity)
+            ->and($actualPlacementIds)->toBe($expectedPlacementIds);
 
         foreach ($actualInventory['placements'] as $actualPlacement) {
-            $expectedPlacement = $inventoryPlacements->where('id', $actualPlacement['id'])->first();
+            $expectedPlacement = $inventoryPlacements->firstWhere('id', $actualPlacement['id']);
 
-            $actualCell = $expectedPlacement->cell;
-            $actualRack = $actualCell->rack;
-            $actualWarehouse = $actualRack->warehouse;
+            $expectedCell = $expectedPlacement->cell;
+            $expectedRack = $expectedCell->rack;
+            $expectedWarehouse = $expectedRack->warehouse;
 
-            expect($expectedPlacement->id)->toBe($actualPlacement['id'])
-                ->and($expectedPlacement->quantity)->toBe($actualPlacement['quantity']);
-
-            expect($actualCell->id)->toBe($actualPlacement['cell']['id'])
-                ->and($actualCell->number)->toBe($actualPlacement['cell']['number'])
-                ->and($actualCell->level)->toBe($actualPlacement['cell']['level'])
-                ->and($actualCell->position)->toBe($actualPlacement['cell']['position']);
-
-            expect($actualRack->id)->toBe($actualPlacement['rack']['id'])
-                ->and($actualRack->code)->toBe($actualPlacement['rack']['code']);
-
-            expect($actualWarehouse->id)->toBe($actualPlacement['warehouse']['id'])
-                ->and($actualWarehouse->name)->toBe($actualPlacement['warehouse']['name']);
+            expect($actualPlacement['id'])->toBe($expectedPlacement->id)
+                ->and($actualPlacement['quantity'])->toBe($expectedPlacement->quantity)
+                ->and($actualPlacement['cell']['id'])->toBe($expectedCell->id)
+                ->and($actualPlacement['cell']['number'])->toBe($expectedCell->number)
+                ->and($actualPlacement['cell']['level'])->toBe($expectedCell->level)
+                ->and($actualPlacement['cell']['position'])->toBe($expectedCell->position)
+                ->and($actualPlacement['rack']['id'])->toBe($expectedRack->id)
+                ->and($actualPlacement['rack']['code'])->toBe($expectedRack->code)
+                ->and($actualPlacement['warehouse']['id'])->toBe($expectedWarehouse->id)
+                ->and($actualPlacement['warehouse']['name'])->toBe($expectedWarehouse->name);
         }
     });
 
@@ -763,8 +761,8 @@ describe('Inventory index', function () {
 
         expect($actualInventory['unplaced_quantity'])->toBe($inventoryUnplacedQuantity)
             ->and($actualInventory['placed_quantity'])->toBe($inventoryPlacedQuantity)
-            ->and(null)->toBe($actualInventory['description'])
-            ->and($actualInventory['placements'])->toHaveCount(0);
+            ->and($actualInventory['description'])->toBeNull()
+            ->and($actualInventory['placements'])->toHaveCount($inventory->inventoryPlacements->count());
     });
 
     it('returns a fully placed inventory', function () {
@@ -808,39 +806,32 @@ describe('Inventory index', function () {
             ],
         ]);
 
-        $inventory->refresh();
-
         $responseData = collect($response->json('data'));
         $actualInventory = $responseData->where('id', $inventory->id)->first();
-        $inventoryPlacedQuantity = $inventory->inventoryPlacements->sum('quantity');
+        $inventoryPlacedQuantity = $inventoryPlacements->sum('quantity');
         $inventoryUnplacedQuantity = $inventory->quantity - $inventoryPlacedQuantity;
 
         expect($actualInventory['unplaced_quantity'])->toBe($inventoryUnplacedQuantity)
             ->and($actualInventory['placed_quantity'])->toBe($inventoryPlacedQuantity)
-            ->and(null)->toBe($actualInventory['description'])
-            ->and($actualInventory['placements'])->toHaveCount(2);
+            ->and($actualInventory['description'])->toBeNull()
+            ->and($actualInventory['placements'])->toHaveCount($inventoryPlacements->count());
+    });
 
-        foreach ($actualInventory['placements'] as $actualPlacement) {
-            $expectedPlacement = $inventoryPlacements->where('id', $actualPlacement['id'])->first();
+    it('returns inventories ordered by id ascending', function () {
+        $inventories = Inventory::factory()->count(3)->create();
 
-            $actualCell = $expectedPlacement->cell;
-            $actualRack = $actualCell->rack;
-            $actualWarehouse = $actualRack->warehouse;
+        $response = $this->be($this->user)->getJson(route('inventory-index'));
 
-            expect($expectedPlacement->id)->toBe($actualPlacement['id'])
-                ->and($expectedPlacement->quantity)->toBe($actualPlacement['quantity']);
+        $response->assertStatus(200);
 
-            expect($actualCell->id)->toBe($actualPlacement['cell']['id'])
-                ->and($actualCell->number)->toBe($actualPlacement['cell']['number'])
-                ->and($actualCell->level)->toBe($actualPlacement['cell']['level'])
-                ->and($actualCell->position)->toBe($actualPlacement['cell']['position']);
+        $response->assertJsonCount(3, 'data');
 
-            expect($actualRack->id)->toBe($actualPlacement['rack']['id'])
-                ->and($actualRack->code)->toBe($actualPlacement['rack']['code']);
+        $expectedInventoryIds = $inventories->pluck('id')->sort()->values()->all();
 
-            expect($actualWarehouse->id)->toBe($actualPlacement['warehouse']['id'])
-                ->and($actualWarehouse->name)->toBe($actualPlacement['warehouse']['name']);
-        }
+        $responseData = collect($response->json('data'));
+        $actualInventoryIds = $responseData->pluck('id')->all();
+
+        expect($actualInventoryIds)->toBe($expectedInventoryIds);
     });
 
     it('returns an empty list when no inventories exist', function () {
