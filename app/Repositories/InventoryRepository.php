@@ -5,6 +5,7 @@ namespace App\Repositories;
 use App\Models\Inventory;
 use App\Models\InventoryPlacement;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class InventoryRepository
 {
@@ -94,8 +95,34 @@ class InventoryRepository
             ->orderBy('id', 'asc')->get();
     }
 
+    public function place(int $inventoryId, int $cellId, int $quantity): InventoryPlacement
+    {
+        return DB::transaction(function () use ($inventoryId, $cellId, $quantity) {
+            $placement = InventoryPlacement::query()->where(['inventory_id' => $inventoryId, 'cell_id' => $cellId])->lockForUpdate()->first();
+
+            if (! $placement) {
+                return InventoryPlacement::query()->create([
+                    'inventory_id' => $inventoryId,
+                    'cell_id' => $cellId,
+                    'quantity' => $quantity,
+                ]);
+            }
+
+            $placement->update([
+                'quantity' => $placement->quantity + $quantity,
+            ]);
+
+            return $placement;
+        });
+    }
+
     public function existsByName(string $name, ?int $id = null): bool
     {
         return Inventory::query()->where('name', $name)->when($id !== null, fn ($query) => $query->whereKeyNot($id))->exists();
+    }
+
+    public function getByIdForUpdate(int $id): ?Inventory
+    {
+        return Inventory::query()->where('id', $id)->lockForUpdate()->first();
     }
 }

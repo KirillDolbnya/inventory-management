@@ -37,6 +37,7 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('', 'index')->name('inventory-index');
             Route::patch('{inventoryId}', 'update')->name('inventory-update')->where('inventoryId', '[0-9]+');
             Route::get('{inventoryId}', 'show')->name('inventory-show')->where('inventoryId', '[0-9]+');
+            Route::post('{inventoryId}/placements', 'place')->name('inventory-place')->where('inventoryId', '[0-9]+');
         });
     });
 

@@ -5,11 +5,15 @@ namespace App\Http\Controllers\Api;
 use App\Exceptions\CellNotFoundException;
 use App\Exceptions\InventoryNameAlreadyTakenException;
 use App\Exceptions\InventoryNotFoundException;
+use App\Exceptions\InventoryPlacementQuantityExceededException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\InventoryCreateRequest;
+use App\Http\Requests\InventoryPlacementRequest;
 use App\Http\Requests\InventoryUpdateRequest;
 use App\UseCases\Inventory\Create\CreateInventory;
 use App\UseCases\Inventory\Create\CreateInventoryInput;
+use App\UseCases\Inventory\Place\PlaceInventory;
+use App\UseCases\Inventory\Place\PlaceInventoryInput;
 use App\UseCases\Inventory\QueryDetail\QueryDetailInventory;
 use App\UseCases\Inventory\QueryDetail\QueryDetailInventoryInput;
 use App\UseCases\Inventory\QueryDetail\QueryDetailInventoryPlacementOutput;
@@ -186,6 +190,39 @@ class InventoryController extends Controller
              * }>
              */
             'data' => $outputData,
+        ]);
+    }
+
+    /**
+     * @throws CellNotFoundException
+     * @throws InventoryPlacementQuantityExceededException
+     * @throws InventoryNotFoundException
+     * @throws \Throwable
+     */
+    #[ScrambleResponse(
+        status: 422,
+        description: 'Validation error',
+        type: 'array{message: string, errors: array<string, string[]>}'
+    )]
+    #[ScrambleResponse(
+        status: 404,
+        description: 'Resource not found',
+        type: 'array{message: string}'
+    )]
+    public function place(InventoryPlacementRequest $request, PlaceInventory $placeInventory): JsonResponse
+    {
+        $input = new PlaceInventoryInput((int) $request->route('inventoryId'), $request->integer('cell_id'), $request->integer('quantity'));
+
+        $output = ($placeInventory)($input);
+
+        return response()->json([
+            'id' => $output->placementId,
+            'inventory_id' => $output->inventoryId,
+            'cell_id' => $output->cellId,
+            'inventory_quantity' => $output->inventoryQuantity,
+            'placement_quantity' => $output->placementQuantity,
+            'placed_quantity' => $output->placedQuantity,
+            'unplaced_quantity' => $output->unplacedQuantity,
         ]);
     }
 }
