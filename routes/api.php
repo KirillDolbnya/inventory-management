@@ -46,6 +46,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('inventory-placements')->group(function () {
         Route::controller(InventoryPlacementController::class)->group(function () {
             Route::post('{inventoryPlacementId}/unplace', 'unplace')->name('inventory-placements-unplace')->where('inventoryPlacementId', '[0-9]+');
+            Route::post('{inventoryPlacementId}/transfer', 'transfer')->name('inventory-placements-transfer')->where('inventoryPlacementId', '[0-9]+');
         });
     });
 
