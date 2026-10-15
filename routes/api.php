@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CellController;
 use App\Http\Controllers\Api\InventoryController;
+use App\Http\Controllers\Api\InventoryPlacementController;
 use App\Http\Controllers\Api\RackController;
 use App\Http\Controllers\Api\WarehouseController;
 use Illuminate\Support\Facades\Route;
@@ -37,7 +38,14 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('', 'index')->name('inventory-index');
             Route::patch('{inventoryId}', 'update')->name('inventory-update')->where('inventoryId', '[0-9]+');
             Route::get('{inventoryId}', 'show')->name('inventory-show')->where('inventoryId', '[0-9]+');
-            Route::post('{inventoryId}/placements', 'place')->name('inventory-place')->where('inventoryId', '[0-9]+');
+        });
+
+        Route::post('{inventoryId}/placements', [InventoryPlacementController::class, 'place'])->name('inventory-place')->where('inventoryId', '[0-9]+');
+    });
+
+    Route::prefix('inventory-placements')->group(function () {
+        Route::controller(InventoryPlacementController::class)->group(function () {
+            Route::post('{inventoryPlacementId}/unplace', 'unplace')->name('inventory-placements-unplace')->where('inventoryPlacementId', '[0-9]+');
         });
     });
 

@@ -116,6 +116,30 @@ class InventoryRepository
         });
     }
 
+    public function updatePlacementQuantity(InventoryPlacement $placement, int $remainingQuantity): InventoryPlacement
+    {
+        $placement->update([
+            'quantity' => $remainingQuantity,
+        ]);
+
+        return $placement;
+    }
+
+    public function getPlacementById(int $placementId): ?InventoryPlacement
+    {
+        return InventoryPlacement::query()->find($placementId);
+    }
+
+    public function getPlacementByIdForUpdate(int $placementId, int $inventoryId): ?InventoryPlacement
+    {
+        return InventoryPlacement::query()->where(['id' => $placementId, 'inventory_id' => $inventoryId])->lockForUpdate()->first();
+    }
+
+    public function deletePlacement(InventoryPlacement $placement): void
+    {
+        $placement->delete();
+    }
+
     public function existsByName(string $name, ?int $id = null): bool
     {
         return Inventory::query()->where('name', $name)->when($id !== null, fn ($query) => $query->whereKeyNot($id))->exists();
