@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AddressSuggestionController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CellController;
 use App\Http\Controllers\Api\InventoryController;
@@ -55,4 +56,6 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('{cellId}/inventories', 'inventories')->name('cell-inventories-index')->where('cellId', '[0-9]+');
         });
     });
+
+    Route::get('addresses/suggestions', AddressSuggestionController::class)->name('addresses-suggestions');
 });
