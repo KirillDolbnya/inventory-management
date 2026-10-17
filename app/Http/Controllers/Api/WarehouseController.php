@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exceptions\AddressResolverUnavailableException;
 use App\Exceptions\FiasIdAlreadyTakenException;
 use App\Exceptions\FiasIdNotFoundException;
 use App\Exceptions\WarehouseNameAlreadyTakenException;
@@ -34,11 +35,22 @@ class WarehouseController extends Controller
      * @throws WarehouseNameAlreadyTakenException
      * @throws FiasIdAlreadyTakenException
      * @throws FiasIdNotFoundException
+     * @throws AddressResolverUnavailableException
      */
     #[ScrambleResponse(
         status: 422,
         description: 'Validation error',
         type: 'array{message: string, errors: array<string, string[]>}'
+    )]
+    #[ScrambleResponse(
+        status: 503,
+        description: 'External address resolution service is temporarily unavailable',
+        type: 'array{message: string}'
+    )]
+    #[ScrambleResponse(
+        status: 502,
+        description: 'Invalid or corrupted response received from the external address resolution service',
+        type: 'array{message: string}'
     )]
     public function store(WarehouseCreateRequest $request, CreateWarehouse $createWarehouse): JsonResponse
     {
@@ -54,6 +66,7 @@ class WarehouseController extends Controller
      * @throws WarehouseNameAlreadyTakenException
      * @throws FiasIdAlreadyTakenException
      * @throws WarehouseNotFoundException
+     * @throws AddressResolverUnavailableException
      */
     #[ScrambleResponse(
         status: 422,
@@ -63,6 +76,16 @@ class WarehouseController extends Controller
     #[ScrambleResponse(
         status: 404,
         description: 'Resource not found',
+        type: 'array{message: string}'
+    )]
+    #[ScrambleResponse(
+        status: 503,
+        description: 'External address resolution service is temporarily unavailable',
+        type: 'array{message: string}'
+    )]
+    #[ScrambleResponse(
+        status: 502,
+        description: 'Invalid or corrupted response received from the external address resolution service',
         type: 'array{message: string}'
     )]
     public function update(WarehouseUpdateRequest $request, UpdateWarehouse $updateWarehouse): JsonResponse
