@@ -49,7 +49,6 @@ describe('SignIn', function () {
 
         $response->assertStatus(401);
         $response->assertJsonStructure([
-            'status',
             'message',
         ]);
     });
@@ -110,6 +109,91 @@ describe('Logout', function () {
         $response->assertStatus(401);
         $response->assertJsonStructure([
             'message',
+        ]);
+    });
+});
+
+describe('Get current user', function () {
+    beforeEach(function () {
+        $name = 'Name';
+        $email = 'test@test.com';
+        $this->password = 'password1234';
+
+        $this->user = User::factory()->createOne([
+            'name' => $name,
+            'email' => $email,
+            'password' => $this->password,
+        ]);
+    });
+
+    it('returns an authenticated user', function () {
+        $responseSignIn = $this->postJson(route('auth-sign-in'), [
+            'email' => $this->user->email,
+            'password' => $this->password,
+            'remember' => true,
+        ],
+            [
+                'Referer' => config('app.url'),
+            ]);
+
+        $responseSignIn->assertStatus(200);
+
+        $responseGetCurrentUser = $this->getJson(route('auth-me'));
+
+        $responseGetCurrentUser->assertStatus(200);
+
+        $responseGetCurrentUser->assertJson([
+            'id' => $this->user->id,
+            'name' => $this->user->name,
+            'email' => $this->user->email,
+        ]);
+    });
+
+    it('rejects an unauthenticated request', function () {
+        $responseGetCurrentUser = $this->getJson(route('auth-me'));
+
+        $responseGetCurrentUser->assertStatus(401);
+
+        $responseGetCurrentUser->assertJson([
+            'message' => 'Unauthenticated.',
+        ]);
+    });
+
+    it('rejects a request after logout', function () {
+        $referer = config('app.url');
+
+        $responseSignIn = $this->postJson(route('auth-sign-in'), [
+            'email' => $this->user->email,
+            'password' => $this->password,
+            'remember' => true,
+        ],
+            [
+                'Referer' => $referer,
+            ]);
+
+        $responseSignIn->assertStatus(200);
+
+        auth()->forgetGuards();
+
+        $responseGetCurrentUser = $this->getJson(route('auth-me'));
+
+        $responseGetCurrentUser->assertStatus(200);
+
+        $responseLogout = $this->postJson(route('auth-logout'), [], [
+            'Referer' => $referer,
+        ]);
+
+        $responseLogout->assertStatus(204);
+        auth()->forgetGuards();
+
+        $responseGetCurrentUserMore = $this->getJson(route('auth-me'), [
+            'Referer' => $referer,
+        ]);
+
+        $responseGetCurrentUserMore->assertStatus(401);
+
+        $responseGetCurrentUserMore->assertJson([
+            'message' => 'Unauthenticated.',
         ]);
     });
 });
