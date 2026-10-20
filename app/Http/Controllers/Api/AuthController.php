@@ -44,4 +44,16 @@ class AuthController extends Controller
 
         return response()->noContent();
     }
+
+    #[ScrambleResponse(
+        status: 401,
+        description: 'Пользователь не авторизован',
+        type: 'array{message: string}'
+    )]
+    public function getCurrentUser(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        return response()->json(['id' => $user->id, 'name' => $user->name, 'email' => $user->email]);
+    }
 }
