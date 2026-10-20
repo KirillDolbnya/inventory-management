@@ -49,7 +49,6 @@ describe('SignIn', function () {
 
         $response->assertStatus(401);
         $response->assertJsonStructure([
-            'status',
             'message',
         ]);
     });

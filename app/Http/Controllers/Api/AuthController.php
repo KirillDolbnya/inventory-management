@@ -21,7 +21,7 @@ class AuthController extends Controller
     #[ScrambleResponse(
         status: 401,
         description: 'Неверный логин или пароль',
-        type: "array{status: 'error', message: string}"
+        type: 'array{message: string}'
     )]
     public function signIn(SignInRequest $request, SignIn $signIn): JsonResponse
     {
