@@ -7,6 +7,7 @@ use App\Exceptions\InsufficientPlacementQuantityException;
 use App\Exceptions\InventoryNotFoundException;
 use App\Exceptions\InventoryPlacementNotFoundException;
 use App\Exceptions\InventoryPlacementQuantityExceededException;
+use App\Exceptions\InventoryReservationConflictException;
 use App\Exceptions\SameSourceAndTargetCellException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\InventoryPlacementRequest;
@@ -60,6 +61,7 @@ class InventoryPlacementController extends Controller
      * @throws InventoryNotFoundException
      * @throws InventoryPlacementNotFoundException
      * @throws InsufficientPlacementQuantityException
+     * @throws InventoryReservationConflictException
      * @throws \Throwable
      */
     #[ScrambleResponse(
@@ -69,6 +71,11 @@ class InventoryPlacementController extends Controller
     )]
     #[ScrambleResponse(
         status: 404,
+        description: 'Resource not found',
+        type: 'array{message: string}'
+    )]
+    #[ScrambleResponse(
+        status: 409,
         description: 'Resource not found',
         type: 'array{message: string}'
     )]
@@ -93,6 +100,7 @@ class InventoryPlacementController extends Controller
      * @throws CellNotFoundException
      * @throws SameSourceAndTargetCellException
      * @throws InsufficientPlacementQuantityException
+     * @throws InventoryReservationConflictException
      * @throws \Throwable
      */
     #[ScrambleResponse(
@@ -102,6 +110,11 @@ class InventoryPlacementController extends Controller
     )]
     #[ScrambleResponse(
         status: 404,
+        description: 'Resource not found',
+        type: 'array{message: string}'
+    )]
+    #[ScrambleResponse(
+        status: 409,
         description: 'Resource not found',
         type: 'array{message: string}'
     )]
