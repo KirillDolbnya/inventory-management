@@ -26,6 +26,8 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('', 'index')->name('warehouses-index');
             Route::delete('{warehouseId}', 'delete')->name('warehouses-delete')->where('warehouseId', '[0-9]+');
             Route::get('{warehouseId}/inventories', 'inventories')->name('warehouses-inventories-index')->where('warehouseId', '[0-9]+');
+            Route::put('{warehouseId}/layout', 'saveLayout')->name('warehouses-layout')->where('warehouseId', '[0-9]+');
+            Route::get('{warehouseId}/layout', 'showLayout')->name('warehouses-get-layout')->where('warehouseId', '[0-9]+');
         });
 
         Route::controller(RackController::class)->group(function () {

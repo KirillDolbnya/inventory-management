@@ -1,6 +1,13 @@
 :80 {
     root * /var/www/public
     encode zstd gzip
+
+    @storage path /storage/*
+    header @storage {
+        Access-Control-Allow-Origin "http://localhost:5173"
+        Vary "Origin"
+    }
+
     php_fastcgi app:9000
     file_server
 }
