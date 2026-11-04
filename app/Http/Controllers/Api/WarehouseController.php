@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Exceptions\AddressResolverUnavailableException;
 use App\Exceptions\FiasIdAlreadyTakenException;
 use App\Exceptions\FiasIdNotFoundException;
+use App\Exceptions\WarehouseLayoutNotFoundException;
 use App\Exceptions\WarehouseNameAlreadyTakenException;
 use App\Exceptions\WarehouseNotFoundException;
 use App\Http\Controllers\Controller;
@@ -231,6 +232,9 @@ class WarehouseController extends Controller
         type: 'array{
         data: array{
             id: int,
+            walls: array{
+                outline: list<array{x: float, z: float}>
+            },
             model: array{
                 url: string,
                 format: string,
@@ -270,10 +274,25 @@ class WarehouseController extends Controller
             $rack['height'],
         ))->all();
 
+        $wallsRequest = $request->input('walls');
+
+        /** @var array{outline: list<array{x: float, z: float}>} $wallsRequest */
+        $outlinePoints = collect($wallsRequest['outline'])->map(function (array $wall) {
+            return [
+                'x' => (float) $wall['x'],
+                'z' => (float) $wall['z'],
+            ];
+        })->all();
+
+        $wallsData = [
+            'outline' => $outlinePoints,
+        ];
+
         $input = new SaveWarehouseLayoutInput(
             (int) $request->route('warehouseId'),
             $request->file('model_path'),
-            $racks
+            $racks,
+            $wallsData,
         );
 
         $output = ($saveWarehouseLayout)($input);
@@ -291,6 +310,7 @@ class WarehouseController extends Controller
         return response()->json([
             'data' => [
                 'id' => $output->warehouseId,
+                'walls' => $output->walls,
                 'model' => $output->model,
                 'racks' => $racksData,
             ],
@@ -299,6 +319,7 @@ class WarehouseController extends Controller
 
     /**
      * @throws WarehouseNotFoundException
+     * @throws WarehouseLayoutNotFoundException
      */
     #[ScrambleResponse(
         status: 404,
@@ -311,6 +332,9 @@ class WarehouseController extends Controller
         type: 'array{
         data: array{
             id: int,
+            walls: array{
+                outline: list<array{x: float, z: float}>
+            }|null,
             model: array{
                 url: string,
                 format: string,
@@ -356,6 +380,7 @@ class WarehouseController extends Controller
         return response()->json([
             'data' => [
                 'id' => $output->warehouseId,
+                'walls' => $output->walls,
                 'model' => $output->model,
                 'racks' => $racksData,
             ],

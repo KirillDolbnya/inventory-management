@@ -74,7 +74,7 @@ class SaveWarehouseLayout
 
                 $oldModelPath = $warehouse->model_path;
 
-                $warehouse = $this->warehouseRepository->saveModelFile($warehouse, $newModelPath);
+                $warehouse = $this->warehouseRepository->saveModelFileWithJson($warehouse, $newModelPath, $input->walls);
 
                 $this->rackRepository->savePositionsRack($recordsToUpdate);
 
@@ -113,6 +113,7 @@ class SaveWarehouseLayout
 
                 return new SaveWarehouseLayoutOutput(
                     $warehouse->id,
+                    $warehouse->walls,
                     $model,
                     $rackOutputs
                 );

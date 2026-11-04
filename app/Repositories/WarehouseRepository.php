@@ -61,9 +61,13 @@ class WarehouseRepository
         return Warehouse::query()->find($id);
     }
 
-    public function saveModelFile(Warehouse $warehouse, string $modelPath): Warehouse
+    /**
+     * @param  array{outline: list<array{x: float|int, z: float|int}>}  $walls
+     */
+    public function saveModelFileWithJson(Warehouse $warehouse, string $modelPath, array $walls): Warehouse
     {
         $warehouse->update([
+            'walls' => $walls,
             'model_path' => $modelPath,
         ]);
 

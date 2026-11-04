@@ -23,6 +23,7 @@ class Warehouse extends Model
     protected $casts = [
         'latitude' => 'float',
         'longitude' => 'float',
+        'walls' => 'array',
     ];
 
     protected $fillable = [
@@ -32,6 +33,7 @@ class Warehouse extends Model
         'latitude',
         'longitude',
         'model_path',
+        'walls',
     ];
 
     /**

@@ -79,6 +79,6 @@ class QueryDetailWarehouseLayout
             );
         })->all();
 
-        return new QueryDetailWarehouseLayoutOutput($warehouse->id, $model, $rackOutputs);
+        return new QueryDetailWarehouseLayoutOutput($warehouse->id, $warehouse->walls, $model, $rackOutputs);
     }
 }
