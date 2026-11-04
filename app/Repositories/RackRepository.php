@@ -80,6 +80,30 @@ class RackRepository
     }
 
     /**
+     * @return Collection<int, Rack>
+     */
+    public function getWarehouseRacksWithoutCells(int $warehouseId): Collection
+    {
+        return Rack::query()->where('warehouse_id', $warehouseId)->orderBy('id', 'asc')->get();
+    }
+
+    /**
+     * @param  list<array{id: int, position_x: float, position_y: float, position_z: float, rotation_y_deg: float, width: float, depth: float, height: float}>  $recordsToUpdate
+     */
+    public function savePositionsRack(array $recordsToUpdate): void
+    {
+        Rack::query()->upsert($recordsToUpdate, ['id'], [
+            'position_x',
+            'position_y',
+            'position_z',
+            'rotation_y_deg',
+            'width',
+            'depth',
+            'height',
+        ]);
+    }
+
+    /**
      * @param  array<int, string>  $codes
      * @return array<int, string>
      */

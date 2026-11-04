@@ -14,9 +14,16 @@ class Warehouse extends Model
      */
     use HasFactory;
 
+    const string FORMAT = 'glb';
+
+    const string UNIT = 'm';
+
+    const string ORIGIN = 'floor-center';
+
     protected $casts = [
         'latitude' => 'float',
         'longitude' => 'float',
+        'walls' => 'array',
     ];
 
     protected $fillable = [
@@ -25,6 +32,8 @@ class Warehouse extends Model
         'fias_id',
         'latitude',
         'longitude',
+        'model_path',
+        'walls',
     ];
 
     /**

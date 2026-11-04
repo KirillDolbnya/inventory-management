@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Api;
 use App\Exceptions\AddressResolverUnavailableException;
 use App\Exceptions\FiasIdAlreadyTakenException;
 use App\Exceptions\FiasIdNotFoundException;
+use App\Exceptions\WarehouseLayoutNotFoundException;
 use App\Exceptions\WarehouseNameAlreadyTakenException;
 use App\Exceptions\WarehouseNotFoundException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\WarehouseCreateRequest;
+use App\Http\Requests\WarehouseLayoutRequest;
 use App\Http\Requests\WarehouseUpdateRequest;
 use App\Http\Resources\WarehouseCollection;
 use App\UseCases\Inventory\QueryListByWarehouse\QueryListByWarehouseInventory;
@@ -19,8 +21,15 @@ use App\UseCases\Warehouse\Create\CreateWarehouse;
 use App\UseCases\Warehouse\Create\CreateWarehouseInput;
 use App\UseCases\Warehouse\Delete\DeleteWarehouse;
 use App\UseCases\Warehouse\Delete\DeleteWarehouseInput;
+use App\UseCases\Warehouse\Layout\SaveWarehouseLayout;
+use App\UseCases\Warehouse\Layout\SaveWarehouseLayoutInput;
+use App\UseCases\Warehouse\Layout\SaveWarehouseLayoutRackInput;
+use App\UseCases\Warehouse\Layout\SaveWarehouseLayoutRackOutput;
 use App\UseCases\Warehouse\QueryDetail\QueryDetailWarehouse;
 use App\UseCases\Warehouse\QueryDetail\QueryDetailWarehouseInput;
+use App\UseCases\Warehouse\QueryLayout\QueryDetailWarehouseLayout;
+use App\UseCases\Warehouse\QueryLayout\QueryDetailWarehouseLayoutInput;
+use App\UseCases\Warehouse\QueryLayout\QueryDetailWarehouseLayoutRackOutput;
 use App\UseCases\Warehouse\QueryList\QueryListWarehouse;
 use App\UseCases\Warehouse\Update\UpdateWarehouse;
 use App\UseCases\Warehouse\Update\UpdateWarehouseInput;
@@ -199,6 +208,182 @@ class WarehouseController extends Controller
              * }>
              */
             'data' => $outputData,
+        ]);
+    }
+
+    /**
+     * @requestMediaType multipart/form-data
+     *
+     * @throws \Throwable
+     */
+    #[ScrambleResponse(
+        status: 422,
+        description: 'Validation error',
+        type: 'array{message: string, errors: array<string, string[]>}'
+    )]
+    #[ScrambleResponse(
+        status: 404,
+        description: 'Resource not found',
+        type: 'array{message: string}'
+    )]
+    #[ScrambleResponse(
+        status: 200,
+        description: 'Сохранённая 3D-схема склада',
+        type: 'array{
+        data: array{
+            id: int,
+            walls: array{
+                outline: list<array{x: float, z: float}>
+            },
+            model: array{
+                url: string,
+                format: string,
+                unit: string,
+                origin: string
+            },
+            racks: list<array{
+                id: int,
+                code: string,
+                position: array{
+                    x: float,
+                    y: float,
+                    z: float
+                },
+                rotation_y_deg: float,
+                dimensions: array{
+                    width: float,
+                    depth: float,
+                    height: float
+                },
+                levels_count: int,
+                cells_per_level: int
+            }>
+        }
+    }',
+    )]
+    public function saveLayout(WarehouseLayoutRequest $request, SaveWarehouseLayout $saveWarehouseLayout): JsonResponse
+    {
+        $racks = collect($request->array('racks'))->map(fn (array $rack) => new SaveWarehouseLayoutRackInput(
+            $rack['id'],
+            $rack['position_x'],
+            $rack['position_y'],
+            $rack['position_z'],
+            $rack['rotation_y_deg'],
+            $rack['width'],
+            $rack['depth'],
+            $rack['height'],
+        ))->all();
+
+        $wallsRequest = $request->input('walls');
+
+        /** @var array{outline: list<array{x: float, z: float}>} $wallsRequest */
+        $outlinePoints = collect($wallsRequest['outline'])->map(function (array $wall) {
+            return [
+                'x' => (float) $wall['x'],
+                'z' => (float) $wall['z'],
+            ];
+        })->all();
+
+        $wallsData = [
+            'outline' => $outlinePoints,
+        ];
+
+        $input = new SaveWarehouseLayoutInput(
+            (int) $request->route('warehouseId'),
+            $request->file('model_path'),
+            $racks,
+            $wallsData,
+        );
+
+        $output = ($saveWarehouseLayout)($input);
+
+        $racksData = collect($output->racks)->map(fn (SaveWarehouseLayoutRackOutput $rack) => [
+            'id' => $rack->rackId,
+            'code' => $rack->code,
+            'position' => $rack->position,
+            'rotation_y_deg' => $rack->rotationYDeg,
+            'dimensions' => $rack->dimensions,
+            'levels_count' => $rack->levelsCount,
+            'cells_per_level' => $rack->cellsPerLevel,
+        ]);
+
+        return response()->json([
+            'data' => [
+                'id' => $output->warehouseId,
+                'walls' => $output->walls,
+                'model' => $output->model,
+                'racks' => $racksData,
+            ],
+        ]);
+    }
+
+    /**
+     * @throws WarehouseNotFoundException
+     * @throws WarehouseLayoutNotFoundException
+     */
+    #[ScrambleResponse(
+        status: 404,
+        description: 'Resource not found',
+        type: 'array{message: string}'
+    )]
+    #[ScrambleResponse(
+        status: 200,
+        description: 'Сохранённая 3D-схема склада',
+        type: 'array{
+        data: array{
+            id: int,
+            walls: array{
+                outline: list<array{x: float, z: float}>
+            }|null,
+            model: array{
+                url: string,
+                format: string,
+                unit: string,
+                origin: string
+            },
+            racks: list<array{
+                id: int,
+                code: string,
+                position: array{
+                    x: float,
+                    y: float,
+                    z: float
+                },
+                rotation_y_deg: float,
+                dimensions: array{
+                    width: float,
+                    depth: float,
+                    height: float
+                },
+                levels_count: int,
+                cells_per_level: int
+            }>
+        }
+    }',
+    )]
+    public function showLayout(Request $request, QueryDetailWarehouseLayout $queryDetailWarehouseLayout): JsonResponse
+    {
+        $input = new QueryDetailWarehouseLayoutInput((int) $request->route('warehouseId'));
+
+        $output = ($queryDetailWarehouseLayout)($input);
+
+        $racksData = collect($output->racks)->map(fn (QueryDetailWarehouseLayoutRackOutput $rack) => [
+            'id' => $rack->rackId,
+            'code' => $rack->code,
+            'position' => $rack->position,
+            'rotation_y_deg' => $rack->rotationYDeg,
+            'dimensions' => $rack->dimensions,
+            'levels_count' => $rack->levelsCount,
+            'cells_per_level' => $rack->cellsPerLevel,
+        ]);
+
+        return response()->json([
+            'data' => [
+                'id' => $output->warehouseId,
+                'walls' => $output->walls,
+                'model' => $output->model,
+                'racks' => $racksData,
+            ],
         ]);
     }
 }
