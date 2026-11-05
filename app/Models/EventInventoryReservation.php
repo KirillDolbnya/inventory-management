@@ -2,11 +2,18 @@
 
 namespace App\Models;
 
+use Database\Factories\EventInventoryReservationFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class EventInventoryReservation extends Model
 {
+    /**
+     * @use HasFactory<EventInventoryReservationFactory>
+     */
+    use HasFactory;
+
     protected $fillable = [
         'event_id',
         'inventory_id',
