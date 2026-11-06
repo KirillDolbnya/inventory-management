@@ -14,6 +14,7 @@ uses(RefreshDatabase::class);
 
 use function Pest\Laravel\assertDatabaseCount;
 use function Pest\Laravel\assertDatabaseHas;
+use function Pest\Laravel\assertDatabaseMissing;
 
 describe('Event reservations', function () {
     beforeEach(function () {
@@ -738,5 +739,105 @@ describe('Events show', function () {
         $response->assertJson([
             'message' => 'Unauthenticated.',
         ]);
+    });
+});
+
+describe('Delete event', function () {
+    beforeEach(function () {
+        $this->user = User::factory()->create();
+
+        $this->inventory = Inventory::factory()->create([
+            'quantity' => 10,
+        ]);
+
+        $this->cell = Cell::factory()->create();
+
+        $this->placement = InventoryPlacement::factory()->create([
+            'inventory_id' => $this->inventory->id,
+            'cell_id' => $this->cell->id,
+            'quantity' => $this->inventory->quantity,
+        ]);
+
+        $this->event = Event::factory()->create();
+        $this->reservations = EventInventoryReservation::factory()->count(3)
+            ->state(new Sequence(
+                [
+                    'event_id' => $this->event->id,
+                    'inventory_id' => $this->inventory->id,
+                    'cell_id' => $this->cell->id,
+                    'quantity' => $this->inventory->quantity,
+                ],
+                ['event_id' => $this->event->id],
+                ['event_id' => $this->event->id],
+            ))
+            ->create();
+    });
+
+    it('deletes an event and its reservations', function () {
+        $otherEvent = Event::factory()->create();
+        $otherReservation = EventInventoryReservation::factory()->create([
+            'event_id' => $otherEvent->id,
+        ]);
+
+        $inventoryQuantity = $this->inventory->quantity;
+        $placementQuantity = $this->placement->quantity;
+
+        $response = $this->be($this->user)->deleteJson(route('event-delete', $this->event->id));
+
+        $response->assertStatus(204);
+
+        assertDatabaseHas('inventories', [
+            'id' => $this->inventory->id,
+            'quantity' => $inventoryQuantity,
+        ]);
+
+        assertDatabaseHas('inventory_placements', [
+            'id' => $this->placement->id,
+            'quantity' => $placementQuantity,
+        ]);
+
+        assertDatabaseHas('events', [
+            'id' => $otherEvent->id,
+        ]);
+
+        assertDatabaseHas('event_inventory_reservations', [
+            'id' => $otherReservation->id,
+        ]);
+
+        assertDatabaseMissing('events', [
+            'id' => $this->event->id,
+        ]);
+
+        foreach ($this->reservations as $reservation) {
+            assertDatabaseMissing('event_inventory_reservations', [
+                'id' => $reservation->id,
+            ]);
+        }
+    });
+
+    it('returns 404 when deleting a nonexistent event', function () {
+        $response = $this->be($this->user)->deleteJson(route('event-delete', $this->event->id + 1000));
+
+        $response->assertStatus(404);
+
+        $response->assertJson([
+            'message' => 'Событие с переданным ID не найдено.',
+        ]);
+
+        assertDatabaseCount('events', 1);
+        assertDatabaseCount('event_inventory_reservations', 3);
+    });
+
+    it('rejects an unauthenticated request', function () {
+        $response = $this->deleteJson(route('event-delete', $this->event->id));
+
+        $response->assertStatus(401);
+
+        $response->assertJson([
+            'message' => 'Unauthenticated.',
+        ]);
+
+        assertDatabaseCount('events', 1);
+        assertDatabaseCount('event_inventory_reservations', 3);
     });
 });
