@@ -66,6 +66,7 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('', 'store')->name('events-create');
             Route::get('', 'index')->name('events-index');
             Route::get('{eventId}', 'show')->name('events-show')->where('eventId', '[0-9]+');
+            Route::delete('{eventId}', 'delete')->name('event-delete')->where('eventId', '[0-9]+');
         });
     });
 });

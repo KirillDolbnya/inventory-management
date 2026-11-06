@@ -11,6 +11,8 @@ use App\Http\Requests\EventCreateRequest;
 use App\UseCases\Event\Create\CreateEvent;
 use App\UseCases\Event\Create\CreateEventInput;
 use App\UseCases\Event\Create\CreateEventReservationInput;
+use App\UseCases\Event\Delete\DeleteEvent;
+use App\UseCases\Event\Delete\DeleteEventInput;
 use App\UseCases\Event\QueryDetail\QueryDetailEvent;
 use App\UseCases\Event\QueryDetail\QueryDetailEventInput;
 use App\UseCases\Event\QueryDetail\QueryDetailEventReservationOutput;
@@ -19,6 +21,7 @@ use Carbon\Carbon;
 use Dedoc\Scramble\Attributes\Response as ScrambleResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 
 class EventController extends Controller
 {
@@ -147,5 +150,17 @@ class EventController extends Controller
         ];
 
         return response()->json($responseData);
+    }
+
+    /**
+     * @throws EventNotFoundException
+     */
+    public function delete(Request $request, DeleteEvent $deleteEvent): Response
+    {
+        $input = new DeleteEventInput((int) $request->route('eventId'));
+
+        ($deleteEvent)($input);
+
+        return response()->noContent();
     }
 }

@@ -87,4 +87,14 @@ class EventRepository
             'eventInventoryReservations.cell.rack.warehouse',
         ])->find($eventId);
     }
+
+    public function getEventById(int $id): ?Event
+    {
+        return Event::query()->find($id);
+    }
+
+    public function deleteWithReservations(Event $event): void
+    {
+        $event->delete();
+    }
 }
