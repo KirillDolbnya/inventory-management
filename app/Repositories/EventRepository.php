@@ -44,14 +44,20 @@ class EventRepository
     /**
      * @return Collection<int, Event>
      */
-    public function getOverlappingByInterval(Carbon $startsAt, Carbon $endsAt, int $inventoryId, int $cellId): Collection
+    public function getOverlappingByInterval(Carbon $startsAt, Carbon $endsAt, int $inventoryId, int $cellId, ?int $eventId = null): Collection
     {
-        return Event::query()->whereHas('eventInventoryReservations', function ($query) use ($inventoryId, $cellId) {
+        $query = Event::query()->whereHas('eventInventoryReservations', function ($query) use ($inventoryId, $cellId) {
             $query->where('inventory_id', $inventoryId)->where('cell_id', $cellId);
         })->where('starts_at', '<', $endsAt)->where('ends_at', '>', $startsAt)->with('eventInventoryReservations', function ($query) use ($inventoryId, $cellId) {
             $query->where('inventory_id', $inventoryId)
                 ->where('cell_id', $cellId);
-        })->get();
+        });
+
+        if ($eventId !== null) {
+            $query->whereKeyNot($eventId);
+        }
+
+        return $query->get();
     }
 
     /**
@@ -90,11 +96,31 @@ class EventRepository
 
     public function getEventById(int $id): ?Event
     {
-        return Event::query()->find($id);
+        return Event::query()->with('eventInventoryReservations')->find($id);
     }
 
     public function deleteWithReservations(Event $event): void
     {
         $event->delete();
+    }
+
+    public function getEventByIdForUpdate(int $id): ?Event
+    {
+        return Event::query()->with('eventInventoryReservations')->lockForUpdate()->find($id);
+    }
+
+    /**
+     * @param array{
+     * name?: string,
+     * description?: string|null,
+     * starts_at?: Carbon,
+     * ends_at?: Carbon
+     * } $data
+     */
+    public function update(Event $event, array $data): Event
+    {
+        $event->update($data);
+
+        return $event;
     }
 }

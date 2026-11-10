@@ -8,6 +8,7 @@ use App\Exceptions\InventoryPlacementNotFoundException;
 use App\Exceptions\InventoryReservationConflictException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\EventCreateRequest;
+use App\Http\Requests\EventUpdateRequest;
 use App\UseCases\Event\Create\CreateEvent;
 use App\UseCases\Event\Create\CreateEventInput;
 use App\UseCases\Event\Create\CreateEventReservationInput;
@@ -17,6 +18,8 @@ use App\UseCases\Event\QueryDetail\QueryDetailEvent;
 use App\UseCases\Event\QueryDetail\QueryDetailEventInput;
 use App\UseCases\Event\QueryDetail\QueryDetailEventReservationOutput;
 use App\UseCases\Event\QueryList\QueryListEvent;
+use App\UseCases\Event\Update\UpdateEvent;
+use App\UseCases\Event\Update\UpdateEventInput;
 use Carbon\Carbon;
 use Dedoc\Scramble\Attributes\Response as ScrambleResponse;
 use Illuminate\Http\JsonResponse;
@@ -155,6 +158,11 @@ class EventController extends Controller
     /**
      * @throws EventNotFoundException
      */
+    #[ScrambleResponse(
+        status: 404,
+        description: 'Resource not found',
+        type: 'array{message: string}'
+    )]
     public function delete(Request $request, DeleteEvent $deleteEvent): Response
     {
         $input = new DeleteEventInput((int) $request->route('eventId'));
@@ -162,5 +170,38 @@ class EventController extends Controller
         ($deleteEvent)($input);
 
         return response()->noContent();
+    }
+
+    /**
+     * @throws InventoryReservationConflictException
+     * @throws EventNotFoundException
+     * @throws \Throwable
+     */
+    #[ScrambleResponse(
+        status: 422,
+        description: 'Validation error',
+        type: 'array{message: string, errors: array<string, string[]>}'
+    )]
+    #[ScrambleResponse(
+        status: 404,
+        description: 'Resource not found',
+        type: 'array{message: string}'
+    )]
+    public function update(EventUpdateRequest $request, UpdateEvent $updateEvent): JsonResponse
+    {
+        $startsAt = $request->has('starts_at') ? Carbon::parse($request->input('starts_at'))->utc() : null;
+        $endsAt = $request->has('ends_at') ? Carbon::parse($request->input('ends_at'))->utc() : null;
+
+        $input = new UpdateEventInput((int) $request->route('eventId'), $request->has('name') ? $request->string('name')->toString() : null, $request->filled('description') ? $request->string('description')->toString() : null, $request->has('description'), $startsAt, $endsAt);
+
+        $output = ($updateEvent)($input);
+
+        return response()->json([
+            'id' => $output->id,
+            'name' => $output->name,
+            'description' => $output->description,
+            'starts_at' => $output->startsAt,
+            'ends_at' => $output->endsAt,
+        ]);
     }
 }
