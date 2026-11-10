@@ -782,7 +782,7 @@ describe('Delete event', function () {
         $inventoryQuantity = $this->inventory->quantity;
         $placementQuantity = $this->placement->quantity;
 
-        $response = $this->be($this->user)->deleteJson(route('event-delete', $this->event->id));
+        $response = $this->be($this->user)->deleteJson(route('events-delete', $this->event->id));
 
         $response->assertStatus(204);
 
@@ -816,7 +816,7 @@ describe('Delete event', function () {
     });
 
     it('returns 404 when deleting a nonexistent event', function () {
-        $response = $this->be($this->user)->deleteJson(route('event-delete', $this->event->id + 1000));
+        $response = $this->be($this->user)->deleteJson(route('events-delete', $this->event->id + 1000));
 
         $response->assertStatus(404);
 
@@ -829,7 +829,7 @@ describe('Delete event', function () {
     });
 
     it('rejects an unauthenticated request', function () {
-        $response = $this->deleteJson(route('event-delete', $this->event->id));
+        $response = $this->deleteJson(route('events-delete', $this->event->id));
 
         $response->assertStatus(401);
 
@@ -839,5 +839,464 @@ describe('Delete event', function () {
 
         assertDatabaseCount('events', 1);
         assertDatabaseCount('event_inventory_reservations', 3);
+    });
+});
+
+describe('Event update', function () {
+    beforeEach(function () {
+        $this->user = User::factory()->create();
+
+        $this->inventory = Inventory::factory()->create([
+            'quantity' => 10,
+        ]);
+
+        $this->placement = InventoryPlacement::factory()->create([
+            'inventory_id' => $this->inventory->id,
+            'quantity' => 10,
+        ]);
+
+        $this->travelTo(Carbon::parse('2026-11-05T10:00:00+03:00')->setTimezone('UTC'));
+
+        $this->startsAt = Carbon::parse('2026-11-05T10:00:00+03:00')->setTimezone('UTC');
+        $this->endsAt = $this->startsAt->clone()->addHours(1);
+        $this->name = 'Событие';
+        $this->description = 'Описание';
+
+        $this->event = Event::factory()->create([
+            'name' => $this->name,
+            'description' => $this->description,
+            'starts_at' => $this->startsAt,
+            'ends_at' => $this->endsAt,
+        ]);
+
+        $this->reservation = EventInventoryReservation::factory()->create([
+            'event_id' => $this->event->id,
+            'inventory_id' => $this->inventory->id,
+            'cell_id' => $this->placement->cell_id,
+            'quantity' => 5,
+        ]);
+    });
+
+    it('updates event details and dates', function () {
+        $newName = 'newName';
+        $newDescription = 'newDescription';
+        $newStartsAt = $this->startsAt->clone()->addMinutes(30);
+        $newEndsAt = $this->endsAt->clone()->addHours(2);
+
+        $otherEvent = Event::factory()->create([
+            'starts_at' => $newStartsAt->clone()->setTimezone('UTC')->format('Y-m-d H:i:s'),
+            'ends_at' => $newEndsAt->clone()->setTimezone('UTC')->format('Y-m-d H:i:s'),
+        ]);
+
+        $otherReservations = EventInventoryReservation::factory()->create([
+            'event_id' => $otherEvent->id,
+            'inventory_id' => $this->inventory->id,
+            'cell_id' => $this->placement->cell_id,
+            'quantity' => 5,
+        ]);
+
+        $response = $this->be($this->user)->patchJson(route('events-update', $this->event->id), [
+            'name' => $newName,
+            'description' => $newDescription,
+            'starts_at' => $newStartsAt->toIso8601String(),
+            'ends_at' => $newEndsAt->toIso8601String(),
+        ]);
+
+        $response->assertStatus(200);
+
+        $response->assertJson([
+            'name' => $newName,
+            'description' => $newDescription,
+            'starts_at' => $newStartsAt->toISOString(),
+            'ends_at' => $newEndsAt->toISOString(),
+        ]);
+
+        assertDatabaseHas('events', [
+            'id' => $this->event->id,
+            'name' => $newName,
+            'description' => $newDescription,
+            'starts_at' => $newStartsAt->clone()->setTimezone('UTC')->format('Y-m-d H:i:s'),
+            'ends_at' => $newEndsAt->clone()->setTimezone('UTC')->format('Y-m-d H:i:s'),
+        ]);
+
+        assertDatabaseHas('events', [
+            'id' => $otherEvent->id,
+            'name' => $otherEvent->name,
+            'description' => $otherEvent->description,
+            'starts_at' => $otherEvent->starts_at,
+            'ends_at' => $otherEvent->ends_at,
+        ]);
+    });
+
+    it('reschedules an event with reservations in multiple cells', function () {
+        $this->inventory->update(['quantity' => 15]);
+
+        $otherCell = Cell::factory()->create();
+
+        $otherPlacement = InventoryPlacement::factory()->create([
+            'inventory_id' => $this->inventory->id,
+            'cell_id' => $otherCell->id,
+            'quantity' => 5,
+        ]);
+
+        $otherReservations = EventInventoryReservation::factory()->create([
+            'event_id' => $this->event->id,
+            'inventory_id' => $this->inventory->id,
+            'cell_id' => $otherCell->id,
+            'quantity' => 5,
+        ]);
+
+        $newStartsAt = $this->startsAt->clone()->addMinutes(30);
+        $newEndsAt = $this->endsAt->clone()->addHours(2);
+
+        $response = $this->be($this->user)->patchJson(route('events-update', $this->event->id), [
+            'starts_at' => $newStartsAt->toIso8601String(),
+            'ends_at' => $newEndsAt->toIso8601String(),
+        ]);
+
+        $response->assertStatus(200);
+
+        assertDatabaseHas('events', [
+            'id' => $this->event->id,
+            'starts_at' => $newStartsAt->clone()->setTimezone('UTC')->format('Y-m-d H:i:s'),
+            'ends_at' => $newEndsAt->clone()->setTimezone('UTC')->format('Y-m-d H:i:s'),
+        ]);
+
+        assertDatabaseHas('event_inventory_reservations', [
+            'id' => $this->reservation->id,
+            'inventory_id' => $this->reservation->inventory_id,
+            'cell_id' => $this->reservation->cell_id,
+            'quantity' => 5,
+        ]);
+
+        assertDatabaseHas('event_inventory_reservations', [
+            'id' => $otherReservations->id,
+            'event_id' => $this->event->id,
+            'inventory_id' => $this->inventory->id,
+            'cell_id' => $otherCell->id,
+            'quantity' => 5,
+        ]);
+    });
+
+    it('updates only the start time', function () {
+        $newStartsAt = $this->startsAt->clone()->addMinutes(30);
+        $newEndsAt = $this->endsAt->clone()->addHours(2);
+
+        $otherEvent = Event::factory()->create([
+            'starts_at' => $this->startsAt->clone()->setTimezone('UTC')->format('Y-m-d H:i:s'),
+            'ends_at' => $newEndsAt->clone()->setTimezone('UTC')->format('Y-m-d H:i:s'),
+        ]);
+
+        $otherReservations = EventInventoryReservation::factory()->create([
+            'event_id' => $otherEvent->id,
+            'inventory_id' => $this->inventory->id,
+            'cell_id' => $this->placement->cell_id,
+            'quantity' => 5,
+        ]);
+
+        $response = $this->be($this->user)->patchJson(route('events-update', $this->event->id), [
+            'starts_at' => $newStartsAt->toIso8601String(),
+        ]);
+
+        $response->assertStatus(200);
+
+        $response->assertJson([
+            'id' => $this->event->id,
+            'name' => $this->event->name,
+            'description' => $this->event->description,
+            'starts_at' => $newStartsAt->toISOString(),
+            'ends_at' => $this->event->ends_at->toISOString(),
+        ]);
+
+        assertDatabaseHas('events', [
+            'id' => $this->event->id,
+            'starts_at' => $newStartsAt->clone()->setTimezone('UTC')->format('Y-m-d H:i:s'),
+        ]);
+    });
+
+    it('updates only the end time', function () {
+        $newEndsAt = $this->endsAt->clone()->addHours(2);
+
+        $otherEvent = Event::factory()->create([
+            'starts_at' => $this->startsAt->clone()->setTimezone('UTC')->format('Y-m-d H:i:s'),
+            'ends_at' => $newEndsAt->clone()->setTimezone('UTC')->format('Y-m-d H:i:s'),
+        ]);
+
+        $otherReservations = EventInventoryReservation::factory()->create([
+            'event_id' => $otherEvent->id,
+            'inventory_id' => $this->inventory->id,
+            'cell_id' => $this->placement->cell_id,
+            'quantity' => 5,
+        ]);
+
+        $response = $this->be($this->user)->patchJson(route('events-update', $this->event->id), [
+            'ends_at' => $newEndsAt->toIso8601String(),
+        ]);
+
+        $response->assertStatus(200);
+
+        $response->assertJson([
+            'id' => $this->event->id,
+            'name' => $this->event->name,
+            'description' => $this->event->description,
+            'starts_at' => $this->event->starts_at->toISOString(),
+            'ends_at' => $newEndsAt->toISOString(),
+        ]);
+
+        assertDatabaseHas('events', [
+            'id' => $this->event->id,
+            'ends_at' => $newEndsAt->clone()->setTimezone('UTC')->format('Y-m-d H:i:s'),
+        ]);
+    });
+
+    it('updates only the name', function () {
+        $newName = 'newName';
+
+        $response = $this->be($this->user)->patchJson(route('events-update', $this->event->id), [
+            'name' => $newName,
+        ]);
+
+        $response->assertStatus(200);
+
+        $response->assertJson([
+            'id' => $this->event->id,
+            'name' => $newName,
+            'description' => $this->event->description,
+            'starts_at' => $this->event->starts_at->toISOString(),
+            'ends_at' => $this->event->ends_at->toISOString(),
+        ]);
+
+        assertDatabaseHas('events', [
+            'id' => $this->event->id,
+            'name' => $newName,
+        ]);
+    });
+
+    it('updates the description', function () {
+        $desc = 'newDesc';
+
+        $response = $this->be($this->user)->patchJson(route('events-update', $this->event->id), [
+            'description' => $desc,
+        ]);
+
+        $response->assertStatus(200);
+
+        $response->assertJson([
+            'id' => $this->event->id,
+            'name' => $this->event->name,
+            'description' => $desc,
+            'starts_at' => $this->event->starts_at->toISOString(),
+            'ends_at' => $this->event->ends_at->toISOString(),
+        ]);
+
+        assertDatabaseHas('events', [
+            'id' => $this->event->id,
+            'description' => $desc,
+        ]);
+    });
+
+    it('clears the description', function () {
+        $desc = null;
+
+        $response = $this->be($this->user)->patchJson(route('events-update', $this->event->id), [
+            'description' => $desc,
+        ]);
+
+        $response->assertStatus(200);
+
+        $response->assertJson([
+            'id' => $this->event->id,
+            'name' => $this->event->name,
+            'description' => $desc,
+            'starts_at' => $this->event->starts_at->toISOString(),
+            'ends_at' => $this->event->ends_at->toISOString(),
+        ]);
+
+        assertDatabaseHas('events', [
+            'id' => $this->event->id,
+            'description' => $desc,
+        ]);
+    });
+
+    it('rejects a start time equal to the existing end time', function () {
+        $response = $this->be($this->user)->patchJson(route('events-update', $this->event->id), [
+            'starts_at' => $this->startsAt->clone()->addHours(1)->toIso8601String(),
+        ]);
+
+        $response->assertStatus(409);
+
+        $response->assertJson([
+            'message' => 'Дата начала не может быть позже или равна дате окончания события',
+        ]);
+
+        assertDatabaseHas('events', [
+            'id' => $this->event->id,
+            'starts_at' => $this->event->starts_at,
+        ]);
+    });
+
+    it('rejects an end time equal to the existing start time', function () {
+        $response = $this->be($this->user)->patchJson(route('events-update', $this->event->id), [
+            'name' => 'newName',
+            'ends_at' => $this->event->starts_at->toIso8601String(),
+        ]);
+
+        $response->assertStatus(409);
+
+        $response->assertJson([
+            'message' => 'Дата начала не может быть позже или равна дате окончания события',
+        ]);
+
+        assertDatabaseHas('events', [
+            'id' => $this->event->id,
+            'name' => $this->event->name,
+            'ends_at' => $this->event->ends_at,
+        ]);
+    });
+
+    it('rejects rescheduling when stock is insufficient', function () {
+        $newEndsAt = $this->endsAt->clone()->addHours(4);
+
+        $otherEvent = Event::factory()->create([
+            'starts_at' => $this->endsAt->clone()->addHours(2)->setTimezone('UTC')->format('Y-m-d H:i:s'),
+            'ends_at' => $newEndsAt->clone()->setTimezone('UTC')->format('Y-m-d H:i:s'),
+        ]);
+
+        $otherReservations = EventInventoryReservation::factory()->create([
+            'event_id' => $otherEvent->id,
+            'inventory_id' => $this->inventory->id,
+            'cell_id' => $this->placement->cell_id,
+            'quantity' => 6,
+        ]);
+
+        $response = $this->be($this->user)->patchJson(route('events-update', $this->event->id), [
+            'name' => 'newName',
+            'ends_at' => $newEndsAt->toIso8601String(),
+        ]);
+
+        $response->assertStatus(409);
+
+        assertDatabaseHas('events', [
+            'id' => $this->event->id,
+            'name' => $this->event->name,
+            'ends_at' => $this->event->ends_at,
+        ]);
+    });
+
+    it('rejects rescheduling when a reserved placement is missing', function () {
+        $emptyCell = Cell::factory()->create();
+
+        $otherReservation = EventInventoryReservation::factory()->create([
+            'event_id' => $this->event->id,
+            'inventory_id' => $this->inventory->id,
+            'cell_id' => $emptyCell->id,
+            'quantity' => 5,
+        ]);
+
+        $newStartsAt = $this->startsAt->clone()->addMinutes(30);
+
+        $response = $this->be($this->user)->patchJson(route('events-update', $this->event->id), [
+            'starts_at' => $newStartsAt->toIso8601String(),
+        ]);
+
+        $response->assertStatus(404);
+
+        $response->assertJson([
+            'message' => 'Размещение товара '.$this->inventory->id.' не найдено в ячейке '.$emptyCell->id,
+        ]);
+
+        assertDatabaseHas('events', [
+            'id' => $this->event->id,
+            'starts_at' => $this->event->starts_at,
+        ]);
+    });
+
+    it('returns 404 when the event does not exist', function () {
+        $newName = 'newName';
+
+        $response = $this->be($this->user)->patchJson(route('events-update', $this->event->id + 1000), [
+            'name' => $newName,
+        ]);
+
+        $response->assertStatus(404);
+
+        $response->assertJson([
+            'message' => 'Событие с переданным ID не найдено.',
+        ]);
+
+        assertDatabaseHas('events', [
+            'id' => $this->event->id,
+            'name' => $this->event->name,
+        ]);
+    });
+
+    it('rejects invalid event update data', function (array $payload, string $errorKey, string $expectedMessage) {
+        $response = $this->be($this->user)->patchJson(route('events-update', $this->event->id), $payload);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors([
+                $errorKey => $expectedMessage,
+            ]);
+
+        assertDatabaseHas('events', [
+            'id' => $this->event->id,
+            'name' => $this->event->name,
+            'description' => $this->event->description,
+            'starts_at' => $this->event->starts_at,
+            'ends_at' => $this->event->ends_at,
+        ]);
+    })->with([
+        'name must be string' => [
+            ['name' => 12345],
+            'name',
+            'Название бронирования должно быть строкой.',
+        ],
+        'name exceeds max length' => [
+            ['name' => str_repeat('A', 256)],
+            'name',
+            'Название бронирования не должно превышать 255 символов.',
+        ],
+        'description must be string' => [
+            ['description' => 12345],
+            'description',
+            'Описание должно быть текстовой строкой.',
+        ],
+        'description exceeds max length' => [
+            ['description' => str_repeat('B', 256)],
+            'description',
+            'Описание не должно превышать 255 символов.',
+        ],
+        'starts_at incorrect ISO format' => [
+            ['starts_at' => '2026-11-05 10:00:00'],
+            'starts_at',
+            'Указан неверный формат даты начала. Ожидается ISO 8601 (например, 2026-11-05T10:00:00+03:00).',
+        ],
+        'starts_at cannot be in past' => [
+            ['starts_at' => '2025-01-01T10:00:00+03:00'],
+            'starts_at',
+            'Дата начала резервирования не может быть в прошлом.',
+        ],
+        'ends_at incorrect ISO format' => [
+            ['ends_at' => '2026-11-05 11:00:00'],
+            'ends_at',
+            'Указан неверный формат даты окончания. Ожидается ISO 8601 (например, 2026-11-05T11:00:00+03:00).',
+        ],
+    ]);
+
+    it('rejects an unauthenticated request', function () {
+        $response = $this->patchJson(route('events-update', $this->event->id), [
+            'name' => 'newName',
+        ]);
+
+        $response->assertStatus(401);
+
+        $response->assertJson([
+            'message' => 'Unauthenticated.',
+        ]);
+
+        assertDatabaseHas('events', [
+            'id' => $this->event->id,
+            'name' => $this->event->name,
+        ]);
     });
 });
