@@ -123,4 +123,16 @@ class EventRepository
 
         return $event;
     }
+
+    public function updateReservation(EventInventoryReservation $eventInventoryReservation, int $quantity): EventInventoryReservation
+    {
+        $eventInventoryReservation->update(['quantity' => $quantity]);
+
+        return $eventInventoryReservation;
+    }
+
+    public function deleteReservation(EventInventoryReservation $eventInventoryReservation): void
+    {
+        $eventInventoryReservation->delete();
+    }
 }

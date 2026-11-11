@@ -6,6 +6,7 @@ use App\Exceptions\EventNotFoundException;
 use App\Exceptions\InvalidEventDurationException;
 use App\Exceptions\InventoryPlacementNotFoundException;
 use App\Exceptions\InventoryReservationConflictException;
+use App\Exceptions\UnlockedInventoryException;
 use App\Models\Event;
 use App\Repositories\EventRepository;
 use App\Repositories\InventoryRepository;
@@ -60,11 +61,20 @@ class UpdateEvent
             $inventoryIds = $event->eventInventoryReservations->pluck('inventory_id')->sort()->values()->all();
 
             $inventories = $this->inventoryRepository->getInventoryByIdsForUpdate($inventoryIds);
-            $placements = $this->inventoryRepository->getPlacementByInventoryIdForUpdate($inventoryIds);
+            $placements = $this->inventoryRepository->getPlacementByInventoryIdsForUpdate($inventoryIds);
             $event = $this->eventRepository->getEventByIdForUpdate($event->id);
 
             if ($event === null) {
                 throw new EventNotFoundException;
+            }
+
+            $inventoryIds = $inventories->pluck('id')->values()->all();
+            $reservationInventoryIds = $event->eventInventoryReservations->pluck('inventory_id')->values()->all();
+
+            $unlockedInventories = collect($reservationInventoryIds)->diff($inventoryIds);
+
+            if ($unlockedInventories->isNotEmpty()) {
+                throw new UnlockedInventoryException;
             }
 
             $startsAt = $input->startsAt ?? Carbon::parse($event->starts_at);

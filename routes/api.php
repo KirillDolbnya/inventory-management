@@ -68,6 +68,9 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('{eventId}', 'show')->name('events-show')->where('eventId', '[0-9]+');
             Route::patch('{eventId}', 'update')->name('events-update')->where('eventId', '[0-9]+');
             Route::delete('{eventId}', 'delete')->name('events-delete')->where('eventId', '[0-9]+');
+            Route::post('{eventId}/reservations', 'reservationsAdd')->name('events-reservations-add')->where('eventId', '[0-9]+');
+            Route::patch('{eventId}/reservations/{reservationId}', 'reservationsUpdate')->name('events-reservations-update')->where('eventId', '[0-9]+')->where('reservationId', '[0-9]+');
+            Route::delete('{eventId}/reservations/{reservationId}', 'reservationsDelete')->name('events-reservations-delete')->where('eventId', '[0-9]+')->where('reservationId', '[0-9]+');
         });
     });
 });
