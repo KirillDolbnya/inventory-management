@@ -19,6 +19,13 @@ class Rack extends Model
         'warehouse_id' => 'integer',
         'levels_count' => 'integer',
         'cells_per_level' => 'integer',
+        'position_x' => 'float',
+        'position_y' => 'float',
+        'position_z' => 'float',
+        'rotation_y_deg' => 'float',
+        'width' => 'float',
+        'depth' => 'float',
+        'height' => 'float',
     ];
 
     protected $fillable = [
@@ -26,6 +33,13 @@ class Rack extends Model
         'warehouse_id',
         'levels_count',
         'cells_per_level',
+        'position_x',
+        'position_y',
+        'position_z',
+        'rotation_y_deg',
+        'width',
+        'depth',
+        'height',
     ];
 
     /**

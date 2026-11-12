@@ -4,6 +4,7 @@ namespace App\UseCases\Warehouse\Update;
 
 use App\Contracts\Addresses\AddressResolver;
 use App\Data\Addresses\ResolvedAddress;
+use App\Exceptions\AddressResolverUnavailableException;
 use App\Exceptions\FiasIdAlreadyTakenException;
 use App\Exceptions\FiasIdNotFoundException;
 use App\Exceptions\WarehouseNameAlreadyTakenException;
@@ -22,6 +23,7 @@ class UpdateWarehouse
      * @throws WarehouseNameAlreadyTakenException
      * @throws FiasIdAlreadyTakenException
      * @throws WarehouseNotFoundException
+     * @throws AddressResolverUnavailableException
      */
     public function __invoke(UpdateWarehouseInput $input): UpdateWarehouseOutput
     {
@@ -58,6 +60,7 @@ class UpdateWarehouse
     /**
      * @throws FiasIdAlreadyTakenException
      * @throws FiasIdNotFoundException
+     * @throws AddressResolverUnavailableException
      */
     private function prepareAddressChange(int $id, string $currentFiasId, ?string $newFiasId): ?ResolvedAddress
     {

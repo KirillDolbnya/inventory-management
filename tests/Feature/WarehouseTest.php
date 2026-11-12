@@ -1,5 +1,7 @@
 <?php
 
+use App\Contracts\Addresses\AddressResolver;
+use App\Integrations\Fake\FakeAddressResolver;
 use App\Models\User;
 use App\Repositories\WarehouseRepository;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -19,6 +21,11 @@ describe('Warehouse creation', function () {
             'email' => $email,
             'password' => $password,
         ]);
+
+        app()->instance(
+            AddressResolver::class,
+            new FakeAddressResolver
+        );
     });
 
     it('creates a warehouse', function () {
@@ -183,6 +190,11 @@ describe('Warehouse update', function () {
         $warehouseRepository = new WarehouseRepository;
 
         $this->warehouse = $warehouseRepository->create('Склад 1', 'г. Москва, Ленинские горы, д. 1', '8ed1481e-1f9e-4340-9774-325db197bf5d', 55.702936, 37.530768);
+
+        app()->instance(
+            AddressResolver::class,
+            new FakeAddressResolver
+        );
     });
 
     it('updates a warehouse name and address', function () {

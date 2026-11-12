@@ -61,6 +61,19 @@ class WarehouseRepository
         return Warehouse::query()->find($id);
     }
 
+    /**
+     * @param  array{outline: list<array{x: float|int, z: float|int}>}  $walls
+     */
+    public function saveModelFileWithJson(Warehouse $warehouse, string $modelPath, array $walls): Warehouse
+    {
+        $warehouse->update([
+            'walls' => $walls,
+            'model_path' => $modelPath,
+        ]);
+
+        return $warehouse;
+    }
+
     public function existsByName(string $name, ?int $id = null): bool
     {
         return Warehouse::query()->where('name', $name)->when($id !== null, fn ($query) => $query->whereKeyNot($id))->exists();
