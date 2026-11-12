@@ -135,4 +135,14 @@ class EventRepository
     {
         $eventInventoryReservation->delete();
     }
+
+    /**
+     * @return Collection<int, EventInventoryReservation>
+     */
+    public function getReservationsByInventoryIdForUpdate(int $inventoryId, Carbon $now): Collection
+    {
+        return EventInventoryReservation::query()->whereHas('event', function ($query) use ($now) {
+            $query->where('ends_at', '>', $now);
+        })->where('inventory_id', $inventoryId)->lockForUpdate()->get();
+    }
 }

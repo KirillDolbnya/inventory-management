@@ -169,7 +169,7 @@ class InventoryRepository
 
     public function existsByName(string $name, ?int $id = null): bool
     {
-        return Inventory::query()->where('name', $name)->when($id !== null, fn ($query) => $query->whereKeyNot($id))->exists();
+        return Inventory::query()->where('name', $name)->when($id !== null, fn ($query) => $query->whereKeyNot($id))->withTrashed()->exists();
     }
 
     public function getByIdForUpdate(int $id): ?Inventory
@@ -197,5 +197,10 @@ class InventoryRepository
     public function getPlacementByInventoryIdForUpdate(int $inventoryId): Collection
     {
         return InventoryPlacement::query()->where('inventory_id', $inventoryId)->lockForUpdate()->get();
+    }
+
+    public function delete(Inventory $inventory): void
+    {
+        $inventory->delete();
     }
 }
