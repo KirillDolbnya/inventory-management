@@ -78,7 +78,8 @@ class InventoryController extends Controller
             (int) $request->route('inventoryId'),
             $request->has('name') ? $request->string('name')->toString() : null,
             $request->filled('description') ? $request->string('description')->toString() : null,
-            $request->has('description')
+            $request->has('description'),
+            $request->has('quantity') ? $request->input('quantity') : null
         );
 
         $output = ($updateInventory)($input);

@@ -190,4 +190,12 @@ class InventoryRepository
     {
         return InventoryPlacement::query()->whereIn('inventory_id', $inventoryIds)->lockForUpdate()->get();
     }
+
+    /**
+     * @return Collection<int, InventoryPlacement>
+     */
+    public function getPlacementByInventoryIdForUpdate(int $inventoryId): Collection
+    {
+        return InventoryPlacement::query()->where('inventory_id', $inventoryId)->lockForUpdate()->get();
+    }
 }

@@ -8,6 +8,7 @@ readonly class UpdateInventoryInput
         public int $id,
         public ?string $name,
         public ?string $description,
-        public bool $descriptionProvided
+        public bool $descriptionProvided,
+        public ?int $quantity,
     ) {}
 }

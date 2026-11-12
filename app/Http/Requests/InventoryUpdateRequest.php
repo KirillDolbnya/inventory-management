@@ -9,6 +9,7 @@ use Illuminate\Validation\Validator;
 
 #[BodyParameter('name', type: 'string', required: false, description: 'Новое наименование предмета.', example: 'Гвозди')]
 #[BodyParameter('description', type: 'string|null', required: false, description: 'Новое дополнительное описание (передайте null, чтобы удалить описание).', example: 'Хранить исключительно в сухом месте')]
+#[BodyParameter('quantity', type: 'integer', required: false, description: 'Новое количество едениц предмета.', example: 2)]
 class InventoryUpdateRequest extends FormRequest
 {
     /**
@@ -29,6 +30,7 @@ class InventoryUpdateRequest extends FormRequest
         return [
             'name' => ['sometimes', 'string', 'max:255'],
             'description' => ['sometimes', 'string', 'max:255', 'nullable'],
+            'quantity' => ['sometimes', 'integer', 'min:1', 'max:5000'],
         ];
     }
 
@@ -39,7 +41,7 @@ class InventoryUpdateRequest extends FormRequest
     {
         return [
             function (Validator $validator) {
-                if ($this->missing('name') && $this->missing('description')) {
+                if ($this->missing('name') && $this->missing('description') && $this->missing('quantity')) {
                     $validator->errors()->add('request', 'Должно быть передано хотя бы одно поле');
                 }
             },
@@ -54,6 +56,10 @@ class InventoryUpdateRequest extends FormRequest
 
             'description.string' => 'Дополнительное описание должно быть строкой.',
             'description.max' => 'Дополнительное описание не должно превышать 255 символов.',
+
+            'quantity.integer' => 'Количество едениц предмета должно быть целым числом.',
+            'quantity.min' => 'Количество едениц предмета должно быть не меньше еденицы.',
+            'quantity.max' => 'Количество едениц предмета не может быть больше 5000.',
         ];
     }
 }
