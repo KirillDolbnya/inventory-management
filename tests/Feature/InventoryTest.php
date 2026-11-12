@@ -1,15 +1,20 @@
 <?php
 
 use App\Models\Cell;
+use App\Models\Event;
+use App\Models\EventInventoryReservation;
 use App\Models\Inventory;
 use App\Models\InventoryPlacement;
 use App\Models\Rack;
 use App\Models\User;
 use App\Models\Warehouse;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 use function Pest\Laravel\assertDatabaseCount;
 use function Pest\Laravel\assertDatabaseHas;
+use function Pest\Laravel\assertNotSoftDeleted;
+use function Pest\Laravel\assertSoftDeleted;
 
 uses(RefreshDatabase::class);
 
@@ -1279,5 +1284,135 @@ describe('Inventory by cell index', function () {
         $response->assertJson([
             'message' => 'Unauthenticated.',
         ]);
+    });
+});
+
+describe('Inventory delete', function () {
+    beforeEach(function () {
+        $this->user = User::factory()->create();
+
+        $this->inventory = Inventory::factory()->create([
+            'quantity' => 5,
+        ]);
+
+        $this->travelTo(Carbon::parse('2026-11-05T10:00:00+03:00')->setTimezone('UTC'));
+        $this->startsAt = Carbon::parse('2026-11-05T10:00:00+03:00');
+        $this->endsAt = $this->startsAt->clone()->addHours(1);
+    });
+
+    it('archives an inventory item without dependencies', function () {
+        $response = $this->be($this->user)->deleteJson(route('inventory-delete', $this->inventory->id));
+
+        $response->assertStatus(204);
+
+        assertSoftDeleted($this->inventory);
+    });
+
+    it('archives inventory while preserving past reservations', function () {
+        $event = Event::factory()->create([
+            'starts_at' => $this->startsAt->clone()->subHours(1)->setTimezone('UTC')->format('Y-m-d H:i:s'),
+            'ends_at' => $this->startsAt->clone()->setTimezone('UTC')->format('Y-m-d H:i:s'),
+        ]);
+
+        $reservation = EventInventoryReservation::factory()->create([
+            'event_id' => $event->id,
+            'inventory_id' => $this->inventory->id,
+            'quantity' => $this->inventory->quantity,
+        ]);
+
+        $response = $this->be($this->user)->deleteJson(route('inventory-delete', $this->inventory->id));
+
+        $response->assertStatus(204);
+
+        assertSoftDeleted($this->inventory);
+
+        $response = $this->be($this->user)->getJson(route('events-show', $event->id));
+
+        $response->assertStatus(200);
+
+        $responseData = collect($response->json('reservations'));
+
+        $deletedInventory = $responseData->firstWhere('inventory.id', $this->inventory->id);
+
+        expect($deletedInventory)->not()->toBeNull()
+            ->and($deletedInventory['id'])->toBe($reservation->id)
+            ->and($deletedInventory['quantity'])->toBe($reservation->quantity)
+            ->and($deletedInventory['inventory']['id'])->toBe($this->inventory->id);
+    });
+
+    it('rejects archiving inventory that is still placed', function () {
+        $placement = InventoryPlacement::factory()->create([
+            'inventory_id' => $this->inventory->id,
+            'quantity' => $this->inventory->quantity,
+        ]);
+
+        $response = $this->be($this->user)->deleteJson(route('inventory-delete', $this->inventory->id));
+
+        $response->assertStatus(409);
+
+        assertNotSoftDeleted($this->inventory);
+
+        assertDatabaseHas('inventory_placements', [
+            'id' => $placement->id,
+            'quantity' => $this->inventory->quantity,
+        ]);
+    });
+
+    it('rejects archiving inventory with an active reservation', function () {
+        $event = Event::factory()->create([
+            'starts_at' => $this->startsAt->setTimezone('UTC')->format('Y-m-d H:i:s'),
+            'ends_at' => $this->endsAt->setTimezone('UTC')->format('Y-m-d H:i:s'),
+        ]);
+
+        $reservation = EventInventoryReservation::factory()->create([
+            'event_id' => $event->id,
+            'inventory_id' => $this->inventory->id,
+            'quantity' => $this->inventory->quantity,
+        ]);
+
+        $response = $this->be($this->user)->deleteJson(route('inventory-delete', $this->inventory->id));
+
+        $response->assertStatus(409);
+
+        assertNotSoftDeleted($this->inventory);
+    });
+
+    it('rejects archiving inventory with a future reservation', function () {
+        $event = Event::factory()->create([
+            'starts_at' => $this->startsAt->clone()->addHours(2)->setTimezone('UTC')->format('Y-m-d H:i:s'),
+            'ends_at' => $this->endsAt->clone()->addHours(3)->setTimezone('UTC')->format('Y-m-d H:i:s'),
+        ]);
+
+        $reservation = EventInventoryReservation::factory()->create([
+            'event_id' => $event->id,
+            'inventory_id' => $this->inventory->id,
+            'quantity' => $this->inventory->quantity,
+        ]);
+
+        $response = $this->be($this->user)->deleteJson(route('inventory-delete', $this->inventory->id));
+
+        $response->assertStatus(409);
+
+        assertNotSoftDeleted($this->inventory);
+    });
+
+    it('returns 404 when the inventory item does not exist', function () {
+        $response = $this->be($this->user)->deleteJson(route('inventory-delete', $this->inventory->id + 1000));
+
+        $response->assertStatus(404);
+
+        assertNotSoftDeleted($this->inventory);
+    });
+
+    it('rejects an unauthenticated request', function () {
+        $response = $this->deleteJson(route('inventory-delete', $this->inventory->id));
+
+        $response->assertStatus(401);
+
+        $response->assertJson([
+            'message' => 'Unauthenticated.',
+        ]);
+
+        assertNotSoftDeleted($this->inventory);
     });
 });
