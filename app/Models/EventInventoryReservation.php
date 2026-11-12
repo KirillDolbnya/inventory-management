@@ -30,7 +30,7 @@ class EventInventoryReservation extends Model
      */
     public function inventory(): BelongsTo
     {
-        return $this->belongsTo(Inventory::class);
+        return $this->belongsTo(Inventory::class)->withTrashed();
     }
 
     /**

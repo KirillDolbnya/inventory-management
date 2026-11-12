@@ -10,6 +10,8 @@ use App\Http\Requests\InventoryCreateRequest;
 use App\Http\Requests\InventoryUpdateRequest;
 use App\UseCases\Inventory\Create\CreateInventory;
 use App\UseCases\Inventory\Create\CreateInventoryInput;
+use App\UseCases\Inventory\Delete\DeleteInventory;
+use App\UseCases\Inventory\Delete\DeleteInventoryInput;
 use App\UseCases\Inventory\QueryDetail\QueryDetailInventory;
 use App\UseCases\Inventory\QueryDetail\QueryDetailInventoryInput;
 use App\UseCases\Inventory\QueryDetail\QueryDetailInventoryPlacementOutput;
@@ -21,6 +23,7 @@ use App\UseCases\Inventory\Update\UpdateInventoryInput;
 use Dedoc\Scramble\Attributes\Response as ScrambleResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 
 class InventoryController extends Controller
 {
@@ -61,6 +64,7 @@ class InventoryController extends Controller
     /**
      * @throws InventoryNotFoundException
      * @throws InventoryNameAlreadyTakenException
+     * @throws \Throwable
      */
     #[ScrambleResponse(
         status: 422,
@@ -72,13 +76,19 @@ class InventoryController extends Controller
         description: 'Resource not found',
         type: 'array{message: string}'
     )]
+    #[ScrambleResponse(
+        status: 409,
+        description: 'Quantity is below placed stock',
+        type: 'array{message: string}'
+    )]
     public function update(InventoryUpdateRequest $request, UpdateInventory $updateInventory): JsonResponse
     {
         $input = new UpdateInventoryInput(
             (int) $request->route('inventoryId'),
             $request->has('name') ? $request->string('name')->toString() : null,
             $request->filled('description') ? $request->string('description')->toString() : null,
-            $request->has('description')
+            $request->has('description'),
+            $request->has('quantity') ? $request->input('quantity') : null
         );
 
         $output = ($updateInventory)($input);
@@ -187,5 +197,28 @@ class InventoryController extends Controller
              */
             'data' => $outputData,
         ]);
+    }
+
+    /**
+     * @throws \Throwable
+     * @throws InventoryNotFoundException
+     */
+    #[ScrambleResponse(
+        status: 404,
+        description: 'Resource not found',
+        type: 'array{message: string}'
+    )]
+    #[ScrambleResponse(
+        status: 409,
+        description: 'Inventory has placements or reservations',
+        type: 'array{message: string}'
+    )]
+    public function delete(Request $request, DeleteInventory $deleteInventory): Response
+    {
+        $input = new DeleteInventoryInput((int) $request->route('inventoryId'));
+
+        ($deleteInventory)($input);
+
+        return response()->noContent();
     }
 }
