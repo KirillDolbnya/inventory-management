@@ -224,6 +224,16 @@ describe('Inventory creation', function () {
             'quantity',
             'Количество единиц предмета должно быть не менее 1.',
         ],
+        'quantity is negative' => [
+            ['name' => 'Товар', 'quantity' => -5],
+            'quantity',
+            'Количество единиц предмета должно быть не менее 1.',
+        ],
+        'quantity exceeds max value' => [
+            ['name' => 'Товар', 'quantity' => 5001],
+            'quantity',
+            'Количество единиц предмета должно быть не более 5000.',
+        ],
         'cell_id is not an integer' => [
             ['name' => 'Товар', 'quantity' => 10, 'cell_id' => 'first-cell'],
             'cell_id',
@@ -252,7 +262,12 @@ describe('Inventory update', function () {
         $this->inventory = Inventory::factory()->create([
             'name' => 'Название',
             'description' => 'Какое-то описание',
-            'quantity' => 1,
+            'quantity' => 7,
+        ]);
+
+        $this->placement = InventoryPlacement::factory()->create([
+            'inventory_id' => $this->inventory->id,
+            'quantity' => 4,
         ]);
     });
 
@@ -275,6 +290,73 @@ describe('Inventory update', function () {
             'id' => $this->inventory->id,
             'name' => 'Гвозди',
             'description' => 'Какое-то описание',
+            'quantity' => $this->inventory->quantity,
+        ]);
+    });
+
+    it('updates the inventory name, description and quantity', function () {
+        $otherPlacement = InventoryPlacement::factory()->create([
+            'inventory_id' => $this->inventory->id,
+            'quantity' => 3,
+        ]);
+
+        $response = $this->be($this->user)->patchJson(route('inventory-update', $this->inventory->id), [
+            'name' => 'Гвозди',
+            'description' => null,
+            'quantity' => 10,
+        ]);
+
+        $response->assertStatus(200);
+
+        $response->assertJson([
+            'id' => $this->inventory->id,
+            'name' => 'Гвозди',
+            'description' => null,
+            'quantity' => 10,
+        ]);
+
+        assertDatabaseHas('inventories', [
+            'id' => $this->inventory->id,
+            'name' => 'Гвозди',
+            'description' => null,
+            'quantity' => 10,
+        ]);
+    });
+
+    it('reduces the total quantity to the placed quantity', function () {
+        $response = $this->be($this->user)->patchJson(route('inventory-update', $this->inventory->id), [
+            'quantity' => 4,
+        ]);
+
+        $response->assertStatus(200);
+
+        $response->assertJson([
+            'id' => $this->inventory->id,
+            'quantity' => 4,
+        ]);
+
+        assertDatabaseHas('inventories', [
+            'id' => $this->inventory->id,
+            'quantity' => 4,
+        ]);
+    });
+
+    it('rejects reducing the total quantity below the placed quantity', function () {
+        $otherPlacement = InventoryPlacement::factory()->create([
+            'inventory_id' => $this->inventory->id,
+            'quantity' => 3,
+        ]);
+
+        $response = $this->be($this->user)->patchJson(route('inventory-update', $this->inventory->id), [
+            'name' => 'Гвозди',
+            'quantity' => 6,
+        ]);
+
+        $response->assertStatus(409);
+
+        assertDatabaseHas('inventories', [
+            'id' => $this->inventory->id,
+            'name' => $this->inventory->name,
             'quantity' => $this->inventory->quantity,
         ]);
     });
@@ -500,6 +582,36 @@ describe('Inventory update', function () {
             ['description' => str_repeat('B', 256)],
             'description',
             'Дополнительное описание не должно превышать 255 символов.',
+        ],
+        'quantity is null' => [
+            ['quantity' => null],
+            'quantity',
+            'Количество едениц предмета должно быть целым числом.',
+        ],
+        'quantity is not integer (string)' => [
+            ['quantity' => 'abc'],
+            'quantity',
+            'Количество едениц предмета должно быть целым числом.',
+        ],
+        'quantity is not integer (float)' => [
+            ['quantity' => 10.5],
+            'quantity',
+            'Количество едениц предмета должно быть целым числом.',
+        ],
+        'quantity is less than 1 (zero)' => [
+            ['quantity' => 0],
+            'quantity',
+            'Количество едениц предмета должно быть не меньше еденицы.',
+        ],
+        'quantity is negative' => [
+            ['quantity' => -1],
+            'quantity',
+            'Количество едениц предмета должно быть не меньше еденицы.',
+        ],
+        'quantity exceeds max value' => [
+            ['quantity' => 5001],
+            'quantity',
+            'Количество едениц предмета не может быть больше 5000.',
         ],
     ]);
 });
