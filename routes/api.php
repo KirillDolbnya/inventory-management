@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AddressSuggestionController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CellController;
+use App\Http\Controllers\Api\EventController;
 use App\Http\Controllers\Api\InventoryController;
 use App\Http\Controllers\Api\InventoryPlacementController;
 use App\Http\Controllers\Api\RackController;
@@ -61,4 +62,17 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::get('addresses/suggestions', AddressSuggestionController::class)->name('addresses-suggestions');
+
+    Route::prefix('events')->group(function () {
+        Route::controller(EventController::class)->group(function () {
+            Route::post('', 'store')->name('events-create');
+            Route::get('', 'index')->name('events-index');
+            Route::get('{eventId}', 'show')->name('events-show')->where('eventId', '[0-9]+');
+            Route::patch('{eventId}', 'update')->name('events-update')->where('eventId', '[0-9]+');
+            Route::delete('{eventId}', 'delete')->name('events-delete')->where('eventId', '[0-9]+');
+            Route::post('{eventId}/reservations', 'reservationsAdd')->name('events-reservations-add')->where('eventId', '[0-9]+');
+            Route::patch('{eventId}/reservations/{reservationId}', 'reservationsUpdate')->name('events-reservations-update')->where('eventId', '[0-9]+')->where('reservationId', '[0-9]+');
+            Route::delete('{eventId}/reservations/{reservationId}', 'reservationsDelete')->name('events-reservations-delete')->where('eventId', '[0-9]+')->where('reservationId', '[0-9]+');
+        });
+    });
 });
