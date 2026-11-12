@@ -410,3 +410,309 @@ describe('Reservation add', function () {
         ]);
     });
 });
+
+describe('Reservation update', function () {
+    beforeEach(function () {
+        $this->user = User::factory()->create();
+
+        $this->inventory = Inventory::factory()->create([
+            'quantity' => 10,
+        ]);
+
+        $this->placement = InventoryPlacement::factory()->create([
+            'inventory_id' => $this->inventory->id,
+            'quantity' => 5,
+        ]);
+
+        $this->travelTo(Carbon::parse('2026-11-05T10:00:00+03:00')->setTimezone('UTC'));
+        $this->startsAt = Carbon::parse('2026-11-05T10:00:00+03:00');
+        $this->endsAt = $this->startsAt->clone()->addHours(1);
+
+        $this->event = Event::factory()->create([
+            'starts_at' => $this->startsAt->setTimezone('UTC')->format('Y-m-d H:i:s'),
+            'ends_at' => $this->endsAt->setTimezone('UTC')->format('Y-m-d H:i:s'),
+        ]);
+
+        $this->reservation = EventInventoryReservation::factory()->create([
+            'event_id' => $this->event->id,
+            'inventory_id' => $this->inventory->id,
+            'cell_id' => $this->placement->cell_id,
+            'quantity' => 2,
+        ]);
+    });
+
+    it('increases the reservation to the available stock', function () {
+        $response = $this->be($this->user)->patchJson(route('events-reservations-update', [$this->event->id, $this->reservation->id]), [
+            'quantity' => 5,
+        ]);
+
+        $response->assertStatus(200);
+
+        $response->assertJson([
+            'id' => $this->reservation->id,
+            'event_id' => $this->event->id,
+            'inventory_id' => $this->inventory->id,
+            'cell_id' => $this->placement->cell_id,
+            'quantity' => 5,
+        ]);
+
+        assertDatabaseHas('event_inventory_reservations', [
+            'id' => $this->reservation->id,
+            'event_id' => $this->event->id,
+            'inventory_id' => $this->inventory->id,
+            'cell_id' => $this->placement->cell_id,
+            'quantity' => 5,
+        ]);
+    });
+
+    it('decreases the reserved quantity', function () {
+        $response = $this->be($this->user)->patchJson(route('events-reservations-update', [$this->event->id, $this->reservation->id]), [
+            'quantity' => 1,
+        ]);
+
+        $response->assertStatus(200);
+
+        $response->assertJson([
+            'id' => $this->reservation->id,
+            'event_id' => $this->event->id,
+            'inventory_id' => $this->inventory->id,
+            'cell_id' => $this->placement->cell_id,
+            'quantity' => 1,
+        ]);
+
+        assertDatabaseHas('event_inventory_reservations', [
+            'id' => $this->reservation->id,
+            'event_id' => $this->event->id,
+            'inventory_id' => $this->inventory->id,
+            'cell_id' => $this->placement->cell_id,
+            'quantity' => 1,
+        ]);
+    });
+
+    it('rejects an increase when overlapping events leave insufficient stock', function () {
+        $otherEvent = Event::factory()->create([
+            'starts_at' => $this->startsAt->setTimezone('UTC')->format('Y-m-d H:i:s'),
+            'ends_at' => $this->endsAt->setTimezone('UTC')->format('Y-m-d H:i:s'),
+        ]);
+
+        $otherReservation = EventInventoryReservation::factory()->create([
+            'event_id' => $otherEvent->id,
+            'inventory_id' => $this->inventory->id,
+            'cell_id' => $this->placement->cell_id,
+            'quantity' => 3,
+        ]);
+
+        $response = $this->be($this->user)->patchJson(route('events-reservations-update', [$this->event->id, $this->reservation->id]), [
+            'quantity' => 3,
+        ]);
+
+        $response->assertStatus(409);
+
+        assertDatabaseHas('event_inventory_reservations', [
+            'id' => $this->reservation->id,
+            'event_id' => $this->event->id,
+            'inventory_id' => $this->inventory->id,
+            'cell_id' => $this->placement->cell_id,
+            'quantity' => 2,
+        ]);
+    });
+
+    it('rejects a quantity greater than the placement stock', function () {
+        $response = $this->be($this->user)->patchJson(route('events-reservations-update', [$this->event->id, $this->reservation->id]), [
+            'quantity' => 6,
+        ]);
+
+        $response->assertStatus(409);
+
+        assertDatabaseHas('event_inventory_reservations', [
+            'id' => $this->reservation->id,
+            'quantity' => 2,
+        ]);
+    });
+
+    it('returns 404 when the event does not exist', function () {
+        $response = $this->be($this->user)->patchJson(route('events-reservations-update', [$this->event->id + 1000, $this->reservation->id]), [
+            'quantity' => 3,
+        ]);
+
+        $response->assertStatus(404);
+
+        assertDatabaseHas('event_inventory_reservations', [
+            'id' => $this->reservation->id,
+            'quantity' => 2,
+        ]);
+    });
+
+    it('returns 404 when the reservation belongs to another event', function () {
+        $otherEvent = Event::factory()->create([
+            'starts_at' => $this->startsAt->setTimezone('UTC')->format('Y-m-d H:i:s'),
+            'ends_at' => $this->endsAt->setTimezone('UTC')->format('Y-m-d H:i:s'),
+        ]);
+
+        $response = $this->be($this->user)->patchJson(route('events-reservations-update', [$otherEvent->id, $this->reservation->id]), [
+            'quantity' => 3,
+        ]);
+
+        $response->assertStatus(404);
+
+        assertDatabaseHas('event_inventory_reservations', [
+            'id' => $this->reservation->id,
+            'quantity' => 2,
+        ]);
+    });
+
+    it('rejects invalid reservation update data', function (array $payload, string $errorKey, string $expectedMessage) {
+        $response = $this->be($this->user)->patchJson(route('events-reservations-update', [$this->event->id, $this->reservation->id]), $payload);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors([
+                $errorKey => $expectedMessage,
+            ]);
+    })->with([
+        'missing quantity' => [
+            [],
+            'quantity',
+            'Количество резервируемого инвентаря обязательно для заполнения.',
+        ],
+        'quantity is null' => [
+            ['quantity' => null],
+            'quantity',
+            'Количество резервируемого инвентаря обязательно для заполнения.',
+        ],
+        'quantity is empty string' => [
+            ['quantity' => ''],
+            'quantity',
+            'Количество резервируемого инвентаря обязательно для заполнения.',
+        ],
+        'quantity is not integer (string)' => [
+            ['quantity' => 'abc'],
+            'quantity',
+            'Количество инвентаря должно быть целым числом.',
+        ],
+        'quantity is not integer (float)' => [
+            ['quantity' => 2.5],
+            'quantity',
+            'Количество инвентаря должно быть целым числом.',
+        ],
+        'quantity is array' => [
+            ['quantity' => [1]],
+            'quantity',
+            'Количество инвентаря должно быть целым числом.',
+        ],
+        'quantity is less than 1 (zero)' => [
+            ['quantity' => 0],
+            'quantity',
+            'Количество инвентаря в резерве должно быть не менее 1 шт.',
+        ],
+        'quantity is negative' => [
+            ['quantity' => -5],
+            'quantity',
+            'Количество инвентаря в резерве должно быть не менее 1 шт.',
+        ],
+    ]);
+
+    it('rejects an unauthenticated request', function () {
+        $response = $this->patchJson(route('events-reservations-update', [$this->event->id, $this->reservation->id]), [
+            'quantity' => 3,
+        ]);
+
+        $response->assertStatus(401);
+
+        $response->assertJson([
+            'message' => 'Unauthenticated.',
+        ]);
+
+        assertDatabaseHas('event_inventory_reservations', [
+            'id' => $this->reservation->id,
+            'quantity' => 2,
+        ]);
+    });
+});
+
+describe('Reservation delete', function () {
+    beforeEach(function () {
+        $this->user = User::factory()->create();
+
+        $this->inventory = Inventory::factory()->create([
+            'quantity' => 10,
+        ]);
+
+        $this->placement = InventoryPlacement::factory()->create([
+            'inventory_id' => $this->inventory->id,
+            'quantity' => 5,
+        ]);
+
+        $this->travelTo(Carbon::parse('2026-11-05T10:00:00+03:00')->setTimezone('UTC'));
+        $this->startsAt = Carbon::parse('2026-11-05T10:00:00+03:00');
+        $this->endsAt = $this->startsAt->clone()->addHours(1);
+
+        $this->event = Event::factory()->create([
+            'starts_at' => $this->startsAt->setTimezone('UTC')->format('Y-m-d H:i:s'),
+            'ends_at' => $this->endsAt->setTimezone('UTC')->format('Y-m-d H:i:s'),
+        ]);
+
+        $this->reservation = EventInventoryReservation::factory()->create([
+            'event_id' => $this->event->id,
+            'inventory_id' => $this->inventory->id,
+            'cell_id' => $this->placement->cell_id,
+            'quantity' => 2,
+        ]);
+    });
+
+    it('deletes only the selected reservation', function () {
+        $otherReservation = EventInventoryReservation::factory()->create([
+            'event_id' => $this->event->id,
+        ]);
+
+        $response = $this->be($this->user)->deleteJson(route('events-reservations-delete', [$this->event->id, $this->reservation->id]));
+
+        $response->assertNoContent();
+
+        assertDatabaseMissing('event_inventory_reservations', [
+            'id' => $this->reservation->id,
+        ]);
+
+        assertDatabaseHas('event_inventory_reservations', [
+            'id' => $otherReservation->id,
+        ]);
+    });
+
+    it('returns 404 when the event does not exist', function () {
+        $response = $this->be($this->user)->deleteJson(route('events-reservations-delete', [$this->event->id + 1000, $this->reservation->id]));
+
+        $response->assertStatus(404);
+
+        assertDatabaseHas('event_inventory_reservations', [
+            'id' => $this->reservation->id,
+        ]);
+    });
+
+    it('returns 404 when the reservation belongs to another event', function () {
+        $otherEvent = Event::factory()->create([
+            'starts_at' => $this->startsAt->setTimezone('UTC')->format('Y-m-d H:i:s'),
+            'ends_at' => $this->endsAt->setTimezone('UTC')->format('Y-m-d H:i:s'),
+        ]);
+
+        $response = $this->be($this->user)->deleteJson(route('events-reservations-delete', [$otherEvent->id, $this->reservation->id]));
+
+        $response->assertStatus(404);
+
+        assertDatabaseHas('event_inventory_reservations', [
+            'id' => $this->reservation->id,
+        ]);
+    });
+
+    it('rejects an unauthenticated request', function () {
+        $response = $this->deleteJson(route('events-reservations-delete', [$this->event->id, $this->reservation->id]));
+
+        $response->assertStatus(401);
+
+        $response->assertJson([
+            'message' => 'Unauthenticated.',
+        ]);
+
+        assertDatabaseHas('event_inventory_reservations', [
+            'id' => $this->reservation->id,
+        ]);
+    });
+});
