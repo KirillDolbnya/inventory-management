@@ -1,6 +1,12 @@
 <?php
 
+use App\Http\Controllers\Api\AddressSuggestionController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CellController;
+use App\Http\Controllers\Api\EventController;
+use App\Http\Controllers\Api\InventoryController;
+use App\Http\Controllers\Api\InventoryPlacementController;
+use App\Http\Controllers\Api\RackController;
 use App\Http\Controllers\Api\WarehouseController;
 use Illuminate\Support\Facades\Route;
 
@@ -8,6 +14,7 @@ Route::prefix('auth')->group(function () {
     Route::controller(AuthController::class)->group(function () {
         Route::post('sign-in', 'signIn')->name('auth-sign-in');
         Route::post('logout', 'logout')->name('auth-logout')->middleware('auth:sanctum');
+        Route::get('me', 'getCurrentUser')->name('auth-me')->middleware('auth:sanctum');
     });
 });
 
@@ -19,6 +26,54 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('{warehouseId}', 'show')->name('warehouses-show')->where('warehouseId', '[0-9]+');
             Route::get('', 'index')->name('warehouses-index');
             Route::delete('{warehouseId}', 'delete')->name('warehouses-delete')->where('warehouseId', '[0-9]+');
+            Route::get('{warehouseId}/inventories', 'inventories')->name('warehouses-inventories-index')->where('warehouseId', '[0-9]+');
+            Route::put('{warehouseId}/layout', 'saveLayout')->name('warehouses-layout')->where('warehouseId', '[0-9]+');
+            Route::get('{warehouseId}/layout', 'showLayout')->name('warehouses-get-layout')->where('warehouseId', '[0-9]+');
+        });
+
+        Route::controller(RackController::class)->group(function () {
+            Route::post('{warehouseId}/racks', 'store')->name('racks-create')->where('warehouseId', '[0-9]+');
+            Route::get('{warehouseId}/racks', 'index')->name('racks-index')->where('warehouseId', '[0-9]+');
+        });
+    });
+
+    Route::prefix('inventories')->group(function () {
+        Route::controller(InventoryController::class)->group(function () {
+            Route::post('', 'store')->name('inventory-create');
+            Route::get('', 'index')->name('inventory-index');
+            Route::patch('{inventoryId}', 'update')->name('inventory-update')->where('inventoryId', '[0-9]+');
+            Route::get('{inventoryId}', 'show')->name('inventory-show')->where('inventoryId', '[0-9]+');
+            Route::delete('{inventoryId}', 'delete')->name('inventory-delete')->where('inventoryId', '[0-9]+');
+        });
+
+        Route::post('{inventoryId}/placements', [InventoryPlacementController::class, 'place'])->name('inventory-place')->where('inventoryId', '[0-9]+');
+    });
+
+    Route::prefix('inventory-placements')->group(function () {
+        Route::controller(InventoryPlacementController::class)->group(function () {
+            Route::post('{inventoryPlacementId}/unplace', 'unplace')->name('inventory-placements-unplace')->where('inventoryPlacementId', '[0-9]+');
+            Route::post('{inventoryPlacementId}/transfer', 'transfer')->name('inventory-placements-transfer')->where('inventoryPlacementId', '[0-9]+');
+        });
+    });
+
+    Route::prefix('cells')->group(function () {
+        Route::controller(CellController::class)->group(function () {
+            Route::get('{cellId}/inventories', 'inventories')->name('cell-inventories-index')->where('cellId', '[0-9]+');
+        });
+    });
+
+    Route::get('addresses/suggestions', AddressSuggestionController::class)->name('addresses-suggestions');
+
+    Route::prefix('events')->group(function () {
+        Route::controller(EventController::class)->group(function () {
+            Route::post('', 'store')->name('events-create');
+            Route::get('', 'index')->name('events-index');
+            Route::get('{eventId}', 'show')->name('events-show')->where('eventId', '[0-9]+');
+            Route::patch('{eventId}', 'update')->name('events-update')->where('eventId', '[0-9]+');
+            Route::delete('{eventId}', 'delete')->name('events-delete')->where('eventId', '[0-9]+');
+            Route::post('{eventId}/reservations', 'reservationsAdd')->name('events-reservations-add')->where('eventId', '[0-9]+');
+            Route::patch('{eventId}/reservations/{reservationId}', 'reservationsUpdate')->name('events-reservations-update')->where('eventId', '[0-9]+')->where('reservationId', '[0-9]+');
+            Route::delete('{eventId}/reservations/{reservationId}', 'reservationsDelete')->name('events-reservations-delete')->where('eventId', '[0-9]+')->where('reservationId', '[0-9]+');
         });
     });
 });
