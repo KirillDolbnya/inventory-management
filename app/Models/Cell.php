@@ -44,4 +44,12 @@ class Cell extends Model
     {
         return $this->hasMany(InventoryPlacement::class);
     }
+
+    /**
+     * @return HasMany<EventInventoryReservation, $this>
+     */
+    public function eventInventoryReservations(): HasMany
+    {
+        return $this->hasMany(EventInventoryReservation::class);
+    }
 }

@@ -1,9 +1,12 @@
 <?php
 
+use App\Models\Event;
+use App\Models\EventInventoryReservation;
 use App\Models\Inventory;
 use App\Models\InventoryPlacement;
 use App\Models\User;
 use App\Repositories\InventoryRepository;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 use function Pest\Laravel\assertDatabaseCount;
@@ -34,6 +37,10 @@ describe('Inventory unplacement', function () {
             'inventory_id' => $this->inventory->id,
             'quantity' => 5,
         ]);
+
+        $this->travelTo(Carbon::parse('2026-11-05T10:00:00+03:00')->setTimezone('UTC'));
+        $this->startsAt = Carbon::parse('2026-11-05T10:00:00+03:00');
+        $this->endsAt = $this->startsAt->clone()->addHours(1);
     });
 
     it('removes an entire inventory placement', function () {
@@ -53,6 +60,31 @@ describe('Inventory unplacement', function () {
 
         assertDatabaseMissing('inventory_placements', [
             'id' => $this->inventoryPlacement->id,
+        ]);
+    });
+
+    it('rejects unplacing more than the unreserved quantity', function () {
+        $event = Event::factory()->create([
+            'starts_at' => $this->startsAt->setTimezone('UTC')->format('Y-m-d H:i:s'),
+            'ends_at' => $this->endsAt->setTimezone('UTC')->format('Y-m-d H:i:s'),
+        ]);
+
+        $reservation = EventInventoryReservation::factory()->create([
+            'event_id' => $event->id,
+            'inventory_id' => $this->inventory->id,
+            'cell_id' => $this->inventoryPlacement->cell_id,
+            'quantity' => 3,
+        ]);
+
+        $response = $this->be($this->user)->postJson(route('inventory-placements-unplace', $this->inventoryPlacement->id), [
+            'quantity' => 3,
+        ]);
+
+        $response->assertStatus(409);
+
+        assertDatabaseHas('inventory_placements', [
+            'id' => $this->inventoryPlacement->id,
+            'quantity' => 5,
         ]);
     });
 

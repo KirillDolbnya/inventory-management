@@ -30,7 +30,7 @@ class InventoryCreateRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255'],
             'description' => ['sometimes', 'string', 'max:255', 'nullable'],
-            'quantity' => ['required', 'integer', 'min:1'],
+            'quantity' => ['required', 'integer', 'min:1', 'max:5000'],
             'cell_id' => ['sometimes', 'integer', 'min:1', 'nullable'],
         ];
     }
@@ -48,6 +48,7 @@ class InventoryCreateRequest extends FormRequest
             'quantity.required' => 'Пожалуйста, укажите количество единиц предмета.',
             'quantity.integer' => 'Количество единиц предмета должно быть целым числом.',
             'quantity.min' => 'Количество единиц предмета должно быть не менее 1.',
+            'quantity.max' => 'Количество единиц предмета должно быть не более 5000.',
 
             'cell_id.integer' => 'Идентификатор ячейки должен быть целым числом.',
             'cell_id.min' => 'Идентификатор ячейки должен быть не менее 1.',

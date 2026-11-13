@@ -61,6 +61,16 @@ class WarehouseRepository
         return Warehouse::query()->find($id);
     }
 
+    public function getByIdForUpdate(int $id): ?Warehouse
+    {
+        return Warehouse::query()->lockForUpdate()->find($id);
+    }
+
+    public function hasPlacements(int $id): bool
+    {
+        return Warehouse::query()->where('id', $id)->whereHas('racks.cells.inventoryPlacements')->exists();
+    }
+
     /**
      * @param  array{outline: list<array{x: float|int, z: float|int}>}  $walls
      */
@@ -76,11 +86,11 @@ class WarehouseRepository
 
     public function existsByName(string $name, ?int $id = null): bool
     {
-        return Warehouse::query()->where('name', $name)->when($id !== null, fn ($query) => $query->whereKeyNot($id))->exists();
+        return Warehouse::query()->where('name', $name)->when($id !== null, fn ($query) => $query->whereKeyNot($id))->withTrashed()->exists();
     }
 
     public function existsByFiasId(string $fiasId, ?int $id = null): bool
     {
-        return Warehouse::query()->where('fias_id', $fiasId)->when($id !== null, fn ($query) => $query->whereKeyNot($id))->exists();
+        return Warehouse::query()->where('fias_id', $fiasId)->when($id !== null, fn ($query) => $query->whereKeyNot($id))->withTrashed()->exists();
     }
 }

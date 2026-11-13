@@ -2,13 +2,19 @@
 
 namespace App\UseCases\Inventory\Transfer;
 
+use App\Exceptions\CannotPlaceToDeletedWarehouseException;
 use App\Exceptions\CellNotFoundException;
 use App\Exceptions\InsufficientPlacementQuantityException;
 use App\Exceptions\InventoryNotFoundException;
 use App\Exceptions\InventoryPlacementNotFoundException;
+use App\Exceptions\InventoryReservationConflictException;
 use App\Exceptions\SameSourceAndTargetCellException;
 use App\Repositories\CellRepository;
+use App\Repositories\EventRepository;
 use App\Repositories\InventoryRepository;
+use App\Repositories\WarehouseRepository;
+use App\Services\Inventory\InventoryReservationAvailabilityCalculator;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class TransferInventory
@@ -16,6 +22,9 @@ class TransferInventory
     public function __construct(
         private readonly InventoryRepository $inventoryRepository,
         private readonly CellRepository $cellRepository,
+        private readonly EventRepository $eventRepository,
+        private readonly InventoryReservationAvailabilityCalculator $inventoryReservationAvailabilityCalculator,
+        private readonly WarehouseRepository $warehouseRepository
     ) {}
 
     /**
@@ -24,6 +33,8 @@ class TransferInventory
      * @throws CellNotFoundException
      * @throws SameSourceAndTargetCellException
      * @throws InsufficientPlacementQuantityException
+     * @throws InventoryReservationConflictException
+     * @throws \LogicException
      * @throws \Throwable
      */
     public function __invoke(TransferInventoryInput $input): TransferInventoryOutput
@@ -54,6 +65,14 @@ class TransferInventory
                 throw new CellNotFoundException;
             }
 
+            $rack = $cell->rack;
+
+            $warehouse = $this->warehouseRepository->getByIdForUpdate($rack->warehouse_id);
+
+            if ($warehouse === null) {
+                throw new CannotPlaceToDeletedWarehouseException;
+            }
+
             if ($input->targetCellId === $placement->cell_id) {
                 throw new SameSourceAndTargetCellException;
             }
@@ -64,6 +83,18 @@ class TransferInventory
 
             if ($input->quantity > $placement->quantity) {
                 throw new InsufficientPlacementQuantityException('Запрашиваемое количество '.$input->quantity.' превышает фактический остаток в данном месте хранения. Доступно для перемещения: '.$placement->quantity.' шт.');
+            }
+
+            $now = Carbon::now();
+            $eventReservations = $this->eventRepository->getActiveAndFutureReservations($now, $inventory->id, $placement->cell_id);
+
+            $minimumAvailableQuantity = ($this->inventoryReservationAvailabilityCalculator)($eventReservations, $placement->quantity);
+
+            if (($minimumAvailableQuantity - $input->quantity) < 0) {
+                throw new InventoryReservationConflictException(sprintf(
+                    'Данный инвентарь зарезервирован под будущие события. Максимально доступно для перемещения: %d шт.',
+                    $minimumAvailableQuantity
+                ));
             }
 
             if ($input->quantity < $sourcePlacementQuantity) {

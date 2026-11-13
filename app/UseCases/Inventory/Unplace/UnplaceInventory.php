@@ -5,19 +5,28 @@ namespace App\UseCases\Inventory\Unplace;
 use App\Exceptions\InsufficientPlacementQuantityException;
 use App\Exceptions\InventoryNotFoundException;
 use App\Exceptions\InventoryPlacementNotFoundException;
+use App\Exceptions\InventoryReservationConflictException;
+use App\Repositories\EventRepository;
 use App\Repositories\InventoryRepository;
+use App\Services\Inventory\InventoryReservationAvailabilityCalculator;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class UnplaceInventory
 {
     public function __construct(
         private readonly InventoryRepository $inventoryRepository,
+        private readonly EventRepository $eventRepository,
+        private readonly InventoryReservationAvailabilityCalculator $inventoryReservationAvailabilityCalculator
+
     ) {}
 
     /**
      * @throws InventoryNotFoundException
      * @throws InventoryPlacementNotFoundException
      * @throws InsufficientPlacementQuantityException
+     * @throws InventoryReservationConflictException
+     * @throws \LogicException
      * @throws \Throwable
      */
     public function __invoke(UnplaceInventoryInput $input): UnplaceInventoryOutput
@@ -49,6 +58,18 @@ class UnplaceInventory
 
             if ($placementQuantity < $input->quantity) {
                 throw new InsufficientPlacementQuantityException('Запрашиваемое количество '.$input->quantity.' превышает фактический остаток в данном месте хранения. Доступно для удаления: '.$placement->quantity.' шт.');
+            }
+
+            $now = Carbon::now();
+            $eventReservations = $this->eventRepository->getActiveAndFutureReservations($now, $inventory->id, $placement->cell_id);
+
+            $minimumAvailableQuantity = ($this->inventoryReservationAvailabilityCalculator)($eventReservations, $placement->quantity);
+
+            if (($minimumAvailableQuantity - $input->quantity) < 0) {
+                throw new InventoryReservationConflictException(sprintf(
+                    'Данный инвентарь зарезервирован под будущие события. Максимально доступно для изъятия: %d шт.',
+                    $minimumAvailableQuantity
+                ));
             }
 
             if ($placementQuantity > $input->quantity) {

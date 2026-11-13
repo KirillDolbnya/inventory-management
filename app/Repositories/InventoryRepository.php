@@ -95,6 +95,15 @@ class InventoryRepository
             ->orderBy('id', 'asc')->get();
     }
 
+    /**
+     * @param  list<int>  $inventoryIds
+     * @return Collection<int, Inventory>
+     */
+    public function getInventoryByIdsForUpdate(array $inventoryIds): Collection
+    {
+        return Inventory::query()->whereIn('id', $inventoryIds)->orderBy('id')->lockForUpdate()->get();
+    }
+
     public function place(int $inventoryId, int $cellId, int $quantity): InventoryPlacement
     {
         return DB::transaction(function () use ($inventoryId, $cellId, $quantity) {
@@ -135,6 +144,24 @@ class InventoryRepository
         return InventoryPlacement::query()->where(['id' => $placementId, 'inventory_id' => $inventoryId])->lockForUpdate()->first();
     }
 
+    /**
+     * @param  list<int>  $placementIds
+     * @return Collection<int, InventoryPlacement>
+     */
+    public function getPlacementByIdsForUpdate(array $placementIds): Collection
+    {
+        return InventoryPlacement::query()->whereIn('id', $placementIds)->orderBy('id')->lockForUpdate()->get();
+    }
+
+    /**
+     * @param  list<int>  $placementIds
+     * @return Collection<int, InventoryPlacement>
+     */
+    public function getPlacementByIds(array $placementIds): Collection
+    {
+        return InventoryPlacement::query()->whereIn('id', $placementIds)->orderBy('id')->get();
+    }
+
     public function deletePlacement(InventoryPlacement $placement): void
     {
         $placement->delete();
@@ -142,11 +169,38 @@ class InventoryRepository
 
     public function existsByName(string $name, ?int $id = null): bool
     {
-        return Inventory::query()->where('name', $name)->when($id !== null, fn ($query) => $query->whereKeyNot($id))->exists();
+        return Inventory::query()->where('name', $name)->when($id !== null, fn ($query) => $query->whereKeyNot($id))->withTrashed()->exists();
     }
 
     public function getByIdForUpdate(int $id): ?Inventory
     {
         return Inventory::query()->where('id', $id)->lockForUpdate()->first();
+    }
+
+    public function getPlacementByInventoryAndCell(int $inventoryId, int $cellId): ?InventoryPlacement
+    {
+        return InventoryPlacement::query()->where('inventory_id', $inventoryId)->where('cell_id', $cellId)->first();
+    }
+
+    /**
+     * @param  list<int>  $inventoryIds
+     * @return Collection<int, InventoryPlacement>
+     */
+    public function getPlacementByInventoryIdsForUpdate(array $inventoryIds): Collection
+    {
+        return InventoryPlacement::query()->whereIn('inventory_id', $inventoryIds)->lockForUpdate()->get();
+    }
+
+    /**
+     * @return Collection<int, InventoryPlacement>
+     */
+    public function getPlacementByInventoryIdForUpdate(int $inventoryId): Collection
+    {
+        return InventoryPlacement::query()->where('inventory_id', $inventoryId)->lockForUpdate()->get();
+    }
+
+    public function delete(Inventory $inventory): void
+    {
+        $inventory->delete();
     }
 }
