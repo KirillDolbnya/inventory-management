@@ -8,6 +8,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 
 use function Pest\Laravel\assertDatabaseCount;
 use function Pest\Laravel\assertDatabaseHas;
+use function Pest\Laravel\assertDatabaseMissing;
 
 uses(RefreshDatabase::class);
 
@@ -30,6 +31,25 @@ describe('Inventory placement', function () {
         ]);
 
         $this->cell = Cell::factory()->create();
+    });
+
+    it('rejects placing inventory in a cell of an archived warehouse', function () {
+        $rack = $this->cell->rack;
+        $warehouse = $rack->warehouse;
+
+        $warehouse->delete();
+
+        $response = $this->be($this->user)->postJson(route('inventory-place', $this->inventory->id), [
+            'cell_id' => $this->cell->id,
+            'quantity' => 5,
+        ]);
+
+        $response->assertStatus(409);
+
+        assertDatabaseMissing('inventory_placements', [
+            'inventory_id' => $this->inventory->id,
+            'cell_id' => $this->cell->id,
+        ]);
     });
 
     it('places part of an inventory in a cell', function () {
