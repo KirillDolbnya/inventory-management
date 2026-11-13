@@ -90,7 +90,9 @@ class EventRepository
             'eventInventoryReservations.inventory',
             'eventInventoryReservations.cell',
             'eventInventoryReservations.cell.rack',
-            'eventInventoryReservations.cell.rack.warehouse',
+            'eventInventoryReservations.cell.rack.warehouse' => function ($query) {
+                $query->withTrashed();
+            },
         ])->find($eventId);
     }
 
