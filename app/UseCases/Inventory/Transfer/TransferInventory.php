@@ -2,6 +2,7 @@
 
 namespace App\UseCases\Inventory\Transfer;
 
+use App\Exceptions\CannotPlaceToDeletedWarehouseException;
 use App\Exceptions\CellNotFoundException;
 use App\Exceptions\InsufficientPlacementQuantityException;
 use App\Exceptions\InventoryNotFoundException;
@@ -11,6 +12,7 @@ use App\Exceptions\SameSourceAndTargetCellException;
 use App\Repositories\CellRepository;
 use App\Repositories\EventRepository;
 use App\Repositories\InventoryRepository;
+use App\Repositories\WarehouseRepository;
 use App\Services\Inventory\InventoryReservationAvailabilityCalculator;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -21,7 +23,8 @@ class TransferInventory
         private readonly InventoryRepository $inventoryRepository,
         private readonly CellRepository $cellRepository,
         private readonly EventRepository $eventRepository,
-        private readonly InventoryReservationAvailabilityCalculator $inventoryReservationAvailabilityCalculator
+        private readonly InventoryReservationAvailabilityCalculator $inventoryReservationAvailabilityCalculator,
+        private readonly WarehouseRepository $warehouseRepository
     ) {}
 
     /**
@@ -60,6 +63,14 @@ class TransferInventory
 
             if ($cell === null) {
                 throw new CellNotFoundException;
+            }
+
+            $rack = $cell->rack;
+
+            $warehouse = $this->warehouseRepository->getByIdForUpdate($rack->warehouse_id);
+
+            if ($warehouse === null) {
+                throw new CannotPlaceToDeletedWarehouseException;
             }
 
             if ($input->targetCellId === $placement->cell_id) {

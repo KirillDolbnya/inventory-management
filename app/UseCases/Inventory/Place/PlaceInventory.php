@@ -2,18 +2,21 @@
 
 namespace App\UseCases\Inventory\Place;
 
+use App\Exceptions\CannotPlaceToDeletedWarehouseException;
 use App\Exceptions\CellNotFoundException;
 use App\Exceptions\InventoryNotFoundException;
 use App\Exceptions\InventoryPlacementQuantityExceededException;
 use App\Repositories\CellRepository;
 use App\Repositories\InventoryRepository;
+use App\Repositories\WarehouseRepository;
 use Illuminate\Support\Facades\DB;
 
 class PlaceInventory
 {
     public function __construct(
         private readonly InventoryRepository $inventoryRepository,
-        private readonly CellRepository $cellRepository
+        private readonly CellRepository $cellRepository,
+        private readonly WarehouseRepository $warehouseRepository,
     ) {}
 
     /**
@@ -35,6 +38,14 @@ class PlaceInventory
 
             if ($cell === null) {
                 throw new CellNotFoundException;
+            }
+
+            $rack = $cell->rack;
+
+            $warehouse = $this->warehouseRepository->getByIdForUpdate($rack->warehouse_id);
+
+            if ($warehouse === null) {
+                throw new CannotPlaceToDeletedWarehouseException;
             }
 
             $placedQuantity = $inventory->inventoryPlacements->sum('quantity');

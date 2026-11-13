@@ -2,11 +2,20 @@
 
 use App\Contracts\Addresses\AddressResolver;
 use App\Integrations\Fake\FakeAddressResolver;
+use App\Models\Cell;
+use App\Models\Inventory;
+use App\Models\InventoryPlacement;
+use App\Models\Rack;
 use App\Models\User;
+use App\Models\Warehouse;
 use App\Repositories\WarehouseRepository;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 
 use function Pest\Laravel\assertDatabaseCount;
+use function Pest\Laravel\assertDatabaseHas;
+use function Pest\Laravel\assertNotSoftDeleted;
+use function Pest\Laravel\assertSoftDeleted;
 
 uses(RefreshDatabase::class);
 
@@ -628,9 +637,17 @@ describe('Warehouse delete', function () {
             'password' => $password,
         ]);
 
-        $warehouseRepository = new WarehouseRepository;
+        $this->storage = Storage::fake('public');
 
-        $this->warehouse = $warehouseRepository->create('Склад 1', 'г. Москва, Ленинские горы, д. 1', '8ed1481e-1f9e-4340-9774-325db197bf5d', 55.702936, 37.530768);
+        $this->fakeFile = UploadedFile::fake()->create('warehouse_map.glb', 500);
+
+        $this->savedPath = 'models/'.$this->fakeFile->getClientOriginalName();
+
+        Storage::disk('public')->put($this->savedPath, $this->fakeFile->getContent());
+
+        $this->warehouse = Warehouse::factory()->create([
+            'model_path' => $this->savedPath,
+        ]);
     });
 
     it('deletes a warehouse', function () {
@@ -640,7 +657,41 @@ describe('Warehouse delete', function () {
 
         $response->assertNoContent();
 
-        assertDatabaseCount('warehouses', 0);
+        assertSoftDeleted('warehouses', [
+            'id' => $this->warehouse->id,
+        ]);
+
+        Storage::disk('public')->assertExists($this->warehouse->model_path);
+    });
+
+    it('rejects archiving a warehouse with inventory placements', function () {
+        $rack = Rack::factory()->create([
+            'warehouse_id' => $this->warehouse->id,
+        ]);
+
+        $cell = Cell::factory()->create([
+            'rack_id' => $rack->id,
+        ]);
+
+        $inventory = Inventory::factory()->create();
+
+        $placement = InventoryPlacement::factory()->create([
+            'inventory_id' => $inventory->id,
+            'cell_id' => $cell->id,
+            'quantity' => $inventory->quantity,
+        ]);
+
+        $response = $this->be($this->user)->deleteJson(route('warehouses-delete', ['warehouseId' => $this->warehouse->id]));
+
+        $response->assertStatus(409);
+
+        assertNotSoftDeleted('warehouses', [
+            'id' => $this->warehouse->id,
+        ]);
+
+        assertDatabaseHas('inventory_placements', [
+            'id' => $placement->id,
+        ]);
     });
 
     it('rejects an unauthenticated request', function () {
@@ -654,7 +705,9 @@ describe('Warehouse delete', function () {
             'message' => 'Unauthenticated.',
         ]);
 
-        assertDatabaseCount('warehouses', 1);
+        assertNotSoftDeleted('warehouses', [
+            'id' => $this->warehouse->id,
+        ]);
     });
 
     it('returns 404 for a missing warehouse', function () {
@@ -667,6 +720,8 @@ describe('Warehouse delete', function () {
                 'message' => 'Склад с передаваемым id не найден',
             ]);
 
-        assertDatabaseCount('warehouses', 1);
+        assertNotSoftDeleted('warehouses', [
+            'id' => $this->warehouse->id,
+        ]);
     });
 });

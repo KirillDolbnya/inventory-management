@@ -40,6 +40,19 @@ describe('Inventory creation', function () {
         ];
     });
 
+    it('rejects creating inventory in a cell of an archived warehouse', function () {
+        $rack = $this->cell->rack;
+        $warehouse = $rack->warehouse;
+
+        $warehouse->delete();
+
+        $response = $this->be($this->user)->postJson(route('inventory-create'), $this->inventoryData);
+
+        $response->assertStatus(409);
+
+        assertDatabaseCount('inventories', 0);
+    });
+
     it('creates inventory with an initial cell placement', function () {
         $response = $this->be($this->user)->postJson(route('inventory-create'), $this->inventoryData);
 

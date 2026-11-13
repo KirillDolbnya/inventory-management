@@ -2,10 +2,12 @@
 
 namespace App\UseCases\Inventory\Create;
 
+use App\Exceptions\CannotPlaceToDeletedWarehouseException;
 use App\Exceptions\CellNotFoundException;
 use App\Exceptions\InventoryNameAlreadyTakenException;
 use App\Repositories\CellRepository;
 use App\Repositories\InventoryRepository;
+use App\Repositories\WarehouseRepository;
 use Illuminate\Support\Facades\DB;
 
 class CreateInventory
@@ -13,6 +15,7 @@ class CreateInventory
     public function __construct(
         private readonly InventoryRepository $inventoryRepository,
         private readonly CellRepository $cellRepository,
+        private readonly WarehouseRepository $warehouseRepository,
     ) {}
 
     /**
@@ -30,7 +33,19 @@ class CreateInventory
             $inventory = $this->inventoryRepository->create($input->name, $input->description, $input->quantity);
 
             if ($input->cellId !== null) {
-                $this->checkCellId($input->cellId);
+                $cell = $this->cellRepository->getById($input->cellId);
+
+                if ($cell === null) {
+                    throw new CellNotFoundException;
+                }
+
+                $rack = $cell->rack;
+
+                $warehouse = $this->warehouseRepository->getByIdForUpdate($rack->warehouse_id);
+
+                if ($warehouse === null) {
+                    throw new CannotPlaceToDeletedWarehouseException;
+                }
 
                 $this->inventoryRepository->assignToCell($input->cellId, $inventory);
             }
@@ -39,15 +54,5 @@ class CreateInventory
         });
 
         return new CreateInventoryOutput($inventory->id, $inventory->name, $inventory->description, $inventory->quantity);
-    }
-
-    /**
-     * @throws CellNotFoundException
-     */
-    private function checkCellId(int $cellId): void
-    {
-        if (! $this->cellRepository->cellExistsById($cellId)) {
-            throw new CellNotFoundException;
-        }
     }
 }

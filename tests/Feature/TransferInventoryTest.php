@@ -46,6 +46,30 @@ describe('Inventory transfer', function () {
         $this->endsAt = $this->startsAt->clone()->addHours(1);
     });
 
+    it('rejects transferring inventory to a cell of an archived warehouse', function () {
+        $rack = $this->cell->rack;
+        $warehouse = $rack->warehouse;
+
+        $warehouse->delete();
+
+        $response = $this->be($this->user)->postJson(route('inventory-placements-transfer', $this->inventoryPlacement->id), [
+            'target_cell_id' => $this->cell->id,
+            'quantity' => 1,
+        ]);
+
+        $response->assertStatus(409);
+
+        assertDatabaseHas('inventory_placements', [
+            'id' => $this->inventoryPlacement->id,
+            'quantity' => $this->inventoryPlacement->quantity,
+        ]);
+
+        assertDatabaseMissing('inventory_placements', [
+            'inventory_id' => $this->inventory->id,
+            'cell_id' => $this->cell->id,
+        ]);
+    });
+
     it('partially transfers inventory to an empty target cell', function () {
         $response = $this->be($this->user)->postJson(route('inventory-placements-transfer', $this->inventoryPlacement->id), [
             'target_cell_id' => $this->cell->id,
