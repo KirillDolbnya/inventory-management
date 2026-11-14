@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Cell;
+use App\Models\InventoryPlacement;
 use App\Models\Rack;
 use App\Models\User;
 use App\Models\Warehouse;
@@ -332,6 +333,195 @@ describe('Warehouse layout', function () {
 
     it('rejects saving a layout without authentication', function () {
         $response = $this->putJson(route('warehouses-layout', $this->warehouse->id + 1000), $this->payload);
+
+        $response->assertStatus(401);
+
+        $response->assertJson([
+            'message' => 'Unauthenticated.',
+        ]);
+    });
+});
+
+describe('Delete layout', function () {
+    beforeEach(function () {
+        $this->user = User::factory()->create();
+
+        $this->warehouse = Warehouse::factory()->create();
+
+        $this->rack = Rack::factory()->create([
+            'warehouse_id' => $this->warehouse->id,
+        ]);
+
+        $this->cell = Cell::factory()->create([
+            'rack_id' => $this->rack->id,
+        ]);
+
+        $this->rackLayout = [
+            'position_x' => '10.5',
+            'position_y' => '0',
+            'position_z' => '-4.2',
+            'rotation_y_deg' => '90',
+            'width' => '4.05',
+            'depth' => '4.05',
+            'height' => '10',
+        ];
+
+        $this->rackData = array_merge($this->rack->toArray(), $this->rackLayout);
+
+        $this->warehouseWalls = [
+            'walls' => [
+                'outline' => [
+                    ['x' => 0, 'z' => 0],
+                    ['x' => 10, 'z' => 0],
+                    ['x' => 10, 'z' => 4],
+                    ['x' => 4, 'z' => 4],
+                    ['x' => 4, 'z' => 10],
+                    ['x' => 0, 'z' => 10],
+                ],
+            ],
+        ];
+    });
+
+    it('deletes the layout of an unoccupied warehouse', function () {
+        $storage = Storage::fake('public');
+        $fakeFile = UploadedFile::fake()->create('warehouse_map.glb', 500);
+        $savedPath = $fakeFile->store('models', 'public');
+
+        $this->warehouse->update(array_merge($this->warehouseWalls, [
+            'model_path' => $savedPath,
+        ]));
+
+        $this->rack->upsert(
+            [array_merge(['id' => $this->rack->id], $this->rackData)],
+            ['id'],
+            ['position_x', 'position_y', 'position_z', 'rotation_y_deg', 'width', 'depth', 'height']
+        );
+
+        $response = $this->be($this->user)->deleteJson(route('warehouses-delete-layout', $this->warehouse->id));
+
+        $response->assertStatus(204);
+
+        assertDatabaseHas('warehouses', [
+            'id' => $this->warehouse->id,
+            'walls' => null,
+            'model_path' => null,
+            'deleted_at' => null,
+        ]);
+
+        Storage::disk('public')->assertMissing($savedPath);
+
+        assertDatabaseHas('racks', [
+            'id' => $this->rack->id,
+            'position_x' => null,
+            'position_y' => null,
+            'position_z' => null,
+            'rotation_y_deg' => null,
+            'width' => null,
+            'depth' => null,
+            'height' => null,
+        ]);
+
+        assertDatabaseHas('cells', [
+            'id' => $this->cell->id,
+            'rack_id' => $this->rack->id,
+        ]);
+    });
+
+    it('returns 204 when no layout has been saved', function () {
+        $response = $this->be($this->user)->deleteJson(route('warehouses-delete-layout', $this->warehouse->id));
+
+        $response->assertStatus(204);
+
+        assertDatabaseHas('warehouses', [
+            'id' => $this->warehouse->id,
+            'walls' => null,
+            'model_path' => null,
+            'deleted_at' => null,
+        ]);
+
+        assertDatabaseHas('racks', [
+            'id' => $this->rack->id,
+            'position_x' => null,
+            'position_y' => null,
+            'position_z' => null,
+            'rotation_y_deg' => null,
+            'width' => null,
+            'depth' => null,
+            'height' => null,
+        ]);
+    });
+
+    it('rejects deleting the layout of a warehouse with inventory placements', function () {
+        $storage = Storage::fake('public');
+        $fakeFile = UploadedFile::fake()->create('warehouse_map.glb', 500);
+        $savedPath = $fakeFile->store('models', 'public');
+
+        $this->warehouse->update(array_merge($this->warehouseWalls, [
+            'model_path' => $savedPath,
+        ]));
+
+        $this->rack->upsert(
+            [array_merge(['id' => $this->rack->id], $this->rackData)],
+            ['id'],
+            ['position_x', 'position_y', 'position_z', 'rotation_y_deg', 'width', 'depth', 'height']
+        );
+
+        $placement = InventoryPlacement::factory()->create([
+            'cell_id' => $this->cell->id,
+        ]);
+
+        $response = $this->be($this->user)->deleteJson(route('warehouses-delete-layout', $this->warehouse->id));
+
+        $response->assertStatus(409);
+
+        $this->assertDatabaseHas('warehouses', [
+            'id' => $this->warehouse->id,
+            'walls' => json_encode(['outline' => $this->warehouseWalls['walls']['outline']]),
+            'model_path' => $savedPath,
+            'deleted_at' => null,
+        ]);
+
+        Storage::disk('public')->assertExists($savedPath);
+
+        assertDatabaseHas('racks', array_merge(
+            ['id' => $this->rack->id],
+            $this->rackLayout
+        ));
+
+        assertDatabaseHas('inventory_placements', [
+            'id' => $placement->id,
+            'inventory_id' => $placement->inventory_id,
+            'cell_id' => $this->cell->id,
+            'quantity' => $placement->quantity,
+        ]);
+    });
+
+    it('returns 404 when deleting a layout for a nonexistent warehouse', function () {
+        $response = $this->be($this->user)->deleteJson(route('warehouses-delete-layout', $this->warehouse->id + 1000));
+
+        $response->assertStatus(404);
+
+        assertDatabaseHas('warehouses', [
+            'id' => $this->warehouse->id,
+            'walls' => null,
+            'model_path' => null,
+            'deleted_at' => null,
+        ]);
+
+        assertDatabaseHas('racks', [
+            'id' => $this->rack->id,
+            'position_x' => null,
+            'position_y' => null,
+            'position_z' => null,
+            'rotation_y_deg' => null,
+            'width' => null,
+            'depth' => null,
+            'height' => null,
+        ]);
+    });
+
+    it('rejects deleting a layout without authentication', function () {
+        $response = $this->deleteJson(route('warehouses-delete-layout', $this->warehouse->id));
 
         $response->assertStatus(401);
 
