@@ -93,4 +93,12 @@ class WarehouseRepository
     {
         return Warehouse::query()->where('fias_id', $fiasId)->when($id !== null, fn ($query) => $query->whereKeyNot($id))->withTrashed()->exists();
     }
+
+    public function deleteLayout(Warehouse $warehouse): void
+    {
+        $warehouse->update([
+            'walls' => null,
+            'model_path' => null,
+        ]);
+    }
 }

@@ -21,6 +21,8 @@ use App\UseCases\Warehouse\Create\CreateWarehouse;
 use App\UseCases\Warehouse\Create\CreateWarehouseInput;
 use App\UseCases\Warehouse\Delete\DeleteWarehouse;
 use App\UseCases\Warehouse\Delete\DeleteWarehouseInput;
+use App\UseCases\Warehouse\DeleteLayout\DeleteWarehouseLayout;
+use App\UseCases\Warehouse\DeleteLayout\DeleteWarehouseLayoutInput;
 use App\UseCases\Warehouse\Layout\SaveWarehouseLayout;
 use App\UseCases\Warehouse\Layout\SaveWarehouseLayoutInput;
 use App\UseCases\Warehouse\Layout\SaveWarehouseLayoutRackInput;
@@ -385,5 +387,17 @@ class WarehouseController extends Controller
                 'racks' => $racksData,
             ],
         ]);
+    }
+
+    /**
+     * @throws \Throwable
+     */
+    public function deleteLayout(Request $request, DeleteWarehouseLayout $deleteWarehouseLayout): Response
+    {
+        $input = new DeleteWarehouseLayoutInput((int) $request->route('warehouseId'));
+
+        ($deleteWarehouseLayout)($input);
+
+        return response()->noContent();
     }
 }

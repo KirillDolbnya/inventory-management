@@ -30,7 +30,7 @@ class SaveWarehouseLayout
 
         try {
             $output = DB::transaction(function () use ($input, $newModelPath, &$oldModelPath) {
-                $warehouse = $this->warehouseRepository->getById($input->warehouseId);
+                $warehouse = $this->warehouseRepository->getByIdForUpdate($input->warehouseId);
 
                 if ($warehouse === null) {
                     throw new WarehouseNotFoundException;
