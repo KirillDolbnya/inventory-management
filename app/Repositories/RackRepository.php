@@ -111,4 +111,17 @@ class RackRepository
     {
         return Rack::query()->where(['warehouse_id' => $warehouseId])->whereIn('code', $codes)->pluck('code')->all();
     }
+
+    public function deleteLayoutRack(int $warehouseId): void
+    {
+        Rack::query()->where(['warehouse_id' => $warehouseId])->update([
+            'position_x' => null,
+            'position_y' => null,
+            'position_z' => null,
+            'rotation_y_deg' => null,
+            'width' => null,
+            'depth' => null,
+            'height' => null,
+        ]);
+    }
 }

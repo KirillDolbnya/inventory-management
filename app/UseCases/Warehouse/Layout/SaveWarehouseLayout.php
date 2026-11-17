@@ -4,6 +4,7 @@ namespace App\UseCases\Warehouse\Layout;
 
 use App\Exceptions\MissingWarehouseRacksException;
 use App\Exceptions\RackNotFoundException;
+use App\Exceptions\WarehouseModelUploadFailedException;
 use App\Exceptions\WarehouseNotFoundException;
 use App\Models\Rack;
 use App\Repositories\RackRepository;
@@ -24,13 +25,22 @@ class SaveWarehouseLayout
     public function __invoke(SaveWarehouseLayoutInput $input): SaveWarehouseLayoutOutput
     {
 
-        $newModelPath = $input->fileModel->store('models', 'public');
+        $warehouse = $this->warehouseRepository->getById($input->warehouseId);
+
+        if ($warehouse === null) {
+            throw new WarehouseNotFoundException;
+        }
 
         $oldModelPath = null;
+        $newModelPath = $input->fileModel->store('models', 'public');
+
+        if ($newModelPath === false) {
+            throw new WarehouseModelUploadFailedException($warehouse->id);
+        }
 
         try {
             $output = DB::transaction(function () use ($input, $newModelPath, &$oldModelPath) {
-                $warehouse = $this->warehouseRepository->getById($input->warehouseId);
+                $warehouse = $this->warehouseRepository->getByIdForUpdate($input->warehouseId);
 
                 if ($warehouse === null) {
                     throw new WarehouseNotFoundException;
@@ -74,7 +84,12 @@ class SaveWarehouseLayout
 
                 $oldModelPath = $warehouse->model_path;
 
-                $warehouse = $this->warehouseRepository->saveModelFileWithJson($warehouse, $newModelPath, $input->walls);
+                $updateWarehouseData = [
+                    'model_path' => $newModelPath,
+                    'walls' => $input->walls,
+                ];
+
+                $warehouse = $this->warehouseRepository->saveModelFileWithJson($warehouse, $updateWarehouseData);
 
                 $this->rackRepository->savePositionsRack($recordsToUpdate);
 

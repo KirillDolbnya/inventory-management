@@ -9,6 +9,7 @@ use App\Exceptions\WarehouseLayoutNotFoundException;
 use App\Exceptions\WarehouseNameAlreadyTakenException;
 use App\Exceptions\WarehouseNotFoundException;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\UpdateWarehouseLayoutRequest;
 use App\Http\Requests\WarehouseCreateRequest;
 use App\Http\Requests\WarehouseLayoutRequest;
 use App\Http\Requests\WarehouseUpdateRequest;
@@ -21,6 +22,8 @@ use App\UseCases\Warehouse\Create\CreateWarehouse;
 use App\UseCases\Warehouse\Create\CreateWarehouseInput;
 use App\UseCases\Warehouse\Delete\DeleteWarehouse;
 use App\UseCases\Warehouse\Delete\DeleteWarehouseInput;
+use App\UseCases\Warehouse\DeleteLayout\DeleteWarehouseLayout;
+use App\UseCases\Warehouse\DeleteLayout\DeleteWarehouseLayoutInput;
 use App\UseCases\Warehouse\Layout\SaveWarehouseLayout;
 use App\UseCases\Warehouse\Layout\SaveWarehouseLayoutInput;
 use App\UseCases\Warehouse\Layout\SaveWarehouseLayoutRackInput;
@@ -33,6 +36,10 @@ use App\UseCases\Warehouse\QueryLayout\QueryDetailWarehouseLayoutRackOutput;
 use App\UseCases\Warehouse\QueryList\QueryListWarehouse;
 use App\UseCases\Warehouse\Update\UpdateWarehouse;
 use App\UseCases\Warehouse\Update\UpdateWarehouseInput;
+use App\UseCases\Warehouse\UpdateLayout\UpdateLayout;
+use App\UseCases\Warehouse\UpdateLayout\UpdateLayoutInput;
+use App\UseCases\Warehouse\UpdateLayout\UpdateLayoutRackInput;
+use App\UseCases\Warehouse\UpdateLayout\UpdateLayoutRackOutput;
 use Dedoc\Scramble\Attributes\Response as ScrambleResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -382,6 +389,142 @@ class WarehouseController extends Controller
                 'id' => $output->warehouseId,
                 'walls' => $output->walls,
                 'model' => $output->model,
+                'racks' => $racksData,
+            ],
+        ]);
+    }
+
+    /**
+     * @throws \Throwable
+     */
+    #[ScrambleResponse(
+        status: 404,
+        description: 'Resource not found',
+        type: 'array{message: string}'
+    )]
+    #[ScrambleResponse(
+        status: 409,
+        description: 'Resource state conflict or business logic violation.',
+        type: 'array{message: string}'
+    )]
+    public function deleteLayout(Request $request, DeleteWarehouseLayout $deleteWarehouseLayout): Response
+    {
+        $input = new DeleteWarehouseLayoutInput((int) $request->route('warehouseId'));
+
+        ($deleteWarehouseLayout)($input);
+
+        return response()->noContent();
+    }
+
+    /**
+     * @throws \Throwable
+     */
+    #[ScrambleResponse(
+        status: 422,
+        description: 'Validation error',
+        type: 'array{message: string, errors: array<string, string[]>}'
+    )]
+    #[ScrambleResponse(
+        status: 404,
+        description: 'Resource not found',
+        type: 'array{message: string}'
+    )]
+    #[ScrambleResponse(
+        status: 200,
+        description: 'Сохранённая 3D-схема склада',
+        type: 'array{
+        data: array{
+            id: int,
+            walls: array{
+                outline: list<array{x: float, z: float}>
+            },
+            model: array{
+                url: string,
+                format: string,
+                unit: string,
+                origin: string
+            },
+            racks: list<array{
+                id: int,
+                code: string,
+                position: array{
+                    x: float,
+                    y: float,
+                    z: float
+                },
+                rotation_y_deg: float,
+                dimensions: array{
+                    width: float,
+                    depth: float,
+                    height: float
+                },
+                levels_count: int,
+                cells_per_level: int
+            }>
+        }
+    }',
+    )]
+    public function updateLayout(UpdateWarehouseLayoutRequest $request, UpdateLayout $updateLayout): JsonResponse
+    {
+        /** @var array{outline: list<array{x: float, z: float}>}|null $wallsData */
+        $wallsData = null;
+
+        if ($request->has('walls')) {
+            $wallsRequest = $request->input('walls');
+
+            /** @var array{outline: list<array{x: float, z: float}>} $wallsRequest */
+            $outlinePoints = collect($wallsRequest['outline'])->map(function (array $wall) {
+                return [
+                    'x' => (float) $wall['x'],
+                    'z' => (float) $wall['z'],
+                ];
+            })->all();
+
+            $wallsData = [
+                'outline' => $outlinePoints,
+            ];
+        }
+
+        /** @var list<UpdateLayoutRackInput>|null $racks */
+        $racks = null;
+
+        if ($request->has('racks')) {
+            $racks = collect($request->array('racks'))->map(fn (array $rack) => new UpdateLayoutRackInput(
+                $rack['id'],
+                $rack['position_x'],
+                $rack['position_y'],
+                $rack['position_z'],
+                $rack['rotation_y_deg'],
+                $rack['width'],
+                $rack['depth'],
+                $rack['height'],
+            ))->all();
+        }
+
+        $input = new UpdateLayoutInput(
+            (int) $request->route('warehouseId'),
+            $request->hasFile('model_path') ? $request->file('model_path') : null,
+            $racks,
+            $wallsData
+        );
+
+        $output = ($updateLayout)($input);
+
+        $racksData = collect($output->racks)->map(fn (UpdateLayoutRackOutput $rack) => [
+            'id' => $rack->rackId,
+            'code' => $rack->code,
+            'position' => $rack->position,
+            'rotation_y_deg' => $rack->rotationYDeg,
+            'dimensions' => $rack->dimensions,
+            'levels_count' => $rack->levelsCount,
+            'cells_per_level' => $rack->cellsPerLevel,
+        ]);
+
+        return response()->json([
+            'data' => [
+                'id' => $output->warehouseId,
+                'walls' => $output->walls,
+                'model' => $output->file,
                 'racks' => $racksData,
             ],
         ]);
