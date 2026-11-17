@@ -1,11 +1,20 @@
 <?php
 
+use App\Models\Cell;
+use App\Models\Event;
+use App\Models\EventInventoryReservation;
+use App\Models\InventoryPlacement;
 use App\Models\Rack;
 use App\Models\User;
+use App\Models\Warehouse;
 use App\Repositories\WarehouseRepository;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 use function Pest\Laravel\assertDatabaseCount;
+use function Pest\Laravel\assertDatabaseHas;
+use function Pest\Laravel\assertNotSoftDeleted;
+use function Pest\Laravel\assertSoftDeleted;
 
 uses(RefreshDatabase::class);
 
@@ -462,5 +471,184 @@ describe('Rack index', function () {
             ->assertJson([
                 'message' => 'Запрашиваемый ресурс или маршрут не найден.',
             ]);
+    });
+});
+
+describe('Delete rack and cells', function () {
+    beforeEach(function () {
+        $this->user = User::factory()->create();
+
+        $this->warehouse = Warehouse::factory()->create();
+
+        $this->rack = Rack::factory()->create([
+            'warehouse_id' => $this->warehouse->id,
+            'levels_count' => 1,
+            'cells_per_level' => 4,
+        ]);
+
+        $this->cells = Cell::factory()->count(3)
+            ->sequence(fn ($sequence) => [
+                'position' => $sequence->index + 1,
+                'level' => 1,
+                'number' => $sequence->index + 1,
+            ])
+            ->create([
+                'rack_id' => $this->rack->id,
+            ]);
+    });
+
+    it('archives a rack and all its cells', function () {
+        $otherRack = Rack::factory()->create([
+            'warehouse_id' => $this->warehouse->id,
+        ]);
+
+        $otherCell = Cell::factory()->create([
+            'position' => 4,
+            'rack_id' => $otherRack->id,
+        ]);
+
+        $this->travelTo(Carbon::parse('2026-12-05T10:00:00+03:00')->setTimezone('UTC'));
+        $this->startsAt = Carbon::parse('2026-11-05T08:00:00+03:00');
+        $this->endsAt = $this->startsAt->clone()->addHours(1);
+
+        $event = Event::factory()->create([
+            'starts_at' => $this->startsAt,
+            'ends_at' => $this->endsAt,
+        ]);
+
+        $reservation = EventInventoryReservation::factory()->create([
+            'event_id' => $event->id,
+            'cell_id' => $this->cells->first()->id,
+        ]);
+
+        $response = $this->be($this->user)->deleteJson(route('racks-delete', [$this->warehouse->id, $this->rack->id]));
+
+        $response->assertStatus(204);
+
+        assertSoftDeleted('racks', [
+            'id' => $this->rack->id,
+        ]);
+
+        assertNotSoftDeleted('racks', [
+            'id' => $otherRack->id,
+        ]);
+
+        assertNotSoftDeleted('cells', [
+            'id' => $otherCell->id,
+        ]);
+
+        assertDatabaseHas('event_inventory_reservations', [
+            'id' => $reservation->id,
+            'cell_id' => $this->cells->first()->id,
+        ]);
+
+        foreach ($this->cells as $cell) {
+            assertSoftDeleted('cells', [
+                'id' => $cell->id,
+            ]);
+        }
+
+        $response = $this->be($this->user)->getJson(route('events-show', $event->id));
+
+        $response->assertStatus(200);
+
+        $reservationsData = collect($response->json('reservations'));
+        $cellId = data_get($reservationsData->firstWhere('cell.id', $reservation->cell_id), 'cell.id');
+
+        expect($cellId)->toBe($this->cells->first()->id);
+    });
+
+    it('rejects archiving a rack with inventory placements', function () {
+        $placement = InventoryPlacement::factory()->create([
+            'cell_id' => $this->cells->first()->id,
+        ]);
+
+        $response = $this->be($this->user)->deleteJson(route('racks-delete', [$this->warehouse->id, $this->rack->id]));
+
+        $response->assertStatus(409);
+
+        assertNotSoftDeleted('racks', [
+            'id' => $this->rack->id,
+        ]);
+
+        foreach ($this->cells as $cell) {
+            assertNotSoftDeleted('cells', [
+                'id' => $cell->id,
+            ]);
+        }
+
+        assertDatabaseHas('inventory_placements', [
+            'id' => $placement->id,
+        ]);
+    });
+
+    it('returns 404 when the rack belongs to another warehouse', function () {
+        $otherWarehouse = Warehouse::factory()->create();
+
+        $response = $this->be($this->user)->deleteJson(route('racks-delete', [$otherWarehouse->id, $this->rack->id]));
+
+        $response->assertStatus(404);
+
+        assertNotSoftDeleted('racks', [
+            'id' => $this->rack->id,
+        ]);
+
+        foreach ($this->cells as $cell) {
+            assertNotSoftDeleted('cells', [
+                'id' => $cell->id,
+            ]);
+        }
+    });
+
+    it('returns 404 when the warehouse does not exist', function () {
+        $response = $this->be($this->user)->deleteJson(route('racks-delete', [$this->warehouse->id + 1000, $this->rack->id]));
+
+        $response->assertStatus(404);
+
+        assertNotSoftDeleted('racks', [
+            'id' => $this->rack->id,
+        ]);
+
+        foreach ($this->cells as $cell) {
+            assertNotSoftDeleted('cells', [
+                'id' => $cell->id,
+            ]);
+        }
+    });
+
+    it('returns 404 when the rack does not exist', function () {
+        $response = $this->be($this->user)->deleteJson(route('racks-delete', [$this->warehouse->id, $this->rack->id + 1000]));
+
+        $response->assertStatus(404);
+
+        assertNotSoftDeleted('racks', [
+            'id' => $this->rack->id,
+        ]);
+
+        foreach ($this->cells as $cell) {
+            assertNotSoftDeleted('cells', [
+                'id' => $cell->id,
+            ]);
+        }
+    });
+
+    it('rejects an unauthenticated request', function () {
+        $response = $this->deleteJson(route('racks-delete', [$this->warehouse->id, $this->rack->id]));
+
+        $response->assertStatus(401);
+
+        $response->assertJson([
+            'message' => 'Unauthenticated.',
+        ]);
+
+        assertNotSoftDeleted('racks', [
+            'id' => $this->rack->id,
+        ]);
+
+        foreach ($this->cells as $cell) {
+            assertNotSoftDeleted('cells', [
+                'id' => $cell->id,
+            ]);
+        }
     });
 });
