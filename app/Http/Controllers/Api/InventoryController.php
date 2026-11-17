@@ -78,7 +78,7 @@ class InventoryController extends Controller
     )]
     #[ScrambleResponse(
         status: 409,
-        description: 'Quantity is below placed stock',
+        description: 'Resource state conflict or business logic violation.',
         type: 'array{message: string}'
     )]
     public function update(InventoryUpdateRequest $request, UpdateInventory $updateInventory): JsonResponse
@@ -210,7 +210,7 @@ class InventoryController extends Controller
     )]
     #[ScrambleResponse(
         status: 409,
-        description: 'Inventory has placements or reservations',
+        description: 'Resource state conflict or business logic violation.',
         type: 'array{message: string}'
     )]
     public function delete(Request $request, DeleteInventory $deleteInventory): Response

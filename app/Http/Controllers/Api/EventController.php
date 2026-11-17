@@ -51,7 +51,7 @@ class EventController extends Controller
     )]
     #[ScrambleResponse(
         status: 409,
-        description: 'Resource not found',
+        description: 'Resource state conflict or business logic violation.',
         type: 'array{message: string}'
     )]
     public function store(EventCreateRequest $request, CreateEvent $createEvent): JsonResponse
@@ -231,7 +231,7 @@ class EventController extends Controller
     )]
     #[ScrambleResponse(
         status: 409,
-        description: 'Resource not found',
+        description: 'Resource state conflict or business logic violation.',
         type: 'array{message: string}'
     )]
     public function reservationsAdd(AddReservationRequest $request, AddReservation $addReservation): JsonResponse
@@ -275,7 +275,7 @@ class EventController extends Controller
     )]
     #[ScrambleResponse(
         status: 409,
-        description: 'Resource not found',
+        description: 'Resource state conflict or business logic violation.',
         type: 'array{message: string}'
     )]
     public function reservationsUpdate(UpdateReservationRequest $request, UpdateReservation $updateReservation): JsonResponse

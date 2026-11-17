@@ -72,14 +72,14 @@ class WarehouseRepository
     }
 
     /**
-     * @param  array{outline: list<array{x: float|int, z: float|int}>}  $walls
+     * @param  array{
+     *     model_path?: string,
+     *     walls?: array{outline: list<array{x: float, z: float}>}
+     * }  $updateData
      */
-    public function saveModelFileWithJson(Warehouse $warehouse, string $modelPath, array $walls): Warehouse
+    public function saveModelFileWithJson(Warehouse $warehouse, array $updateData): Warehouse
     {
-        $warehouse->update([
-            'walls' => $walls,
-            'model_path' => $modelPath,
-        ]);
+        $warehouse->update($updateData);
 
         return $warehouse;
     }
