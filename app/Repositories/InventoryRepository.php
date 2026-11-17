@@ -203,4 +203,13 @@ class InventoryRepository
     {
         $inventory->delete();
     }
+
+    /**
+     * @param  list<int>  $cellIds
+     * @return Collection<int, InventoryPlacement>
+     */
+    public function getPlacementsByCellIds(array $cellIds): Collection
+    {
+        return InventoryPlacement::query()->whereIn('cell_id', $cellIds)->get();
+    }
 }

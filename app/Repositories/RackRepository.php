@@ -124,4 +124,14 @@ class RackRepository
             'height' => null,
         ]);
     }
+
+    public function getByRackIdWithWarehouseId(int $warehouseId, int $rackId): ?Rack
+    {
+        return Rack::query()->where(['warehouse_id' => $warehouseId, 'id' => $rackId])->first();
+    }
+
+    public function delete(Rack $rack): void
+    {
+        $rack->delete();
+    }
 }

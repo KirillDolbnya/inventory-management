@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Exceptions\RackCodeAlreadyTakenException;
+use App\Exceptions\RackNotFoundException;
 use App\Exceptions\WarehouseNotFoundException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\RackCreateRequest;
@@ -10,11 +11,14 @@ use App\Http\Resources\RackCollection;
 use App\UseCases\Rack\Create\CreateRackItemInput;
 use App\UseCases\Rack\Create\CreateRacks;
 use App\UseCases\Rack\Create\CreateRacksInput;
+use App\UseCases\Rack\Delete\DeleteRack;
+use App\UseCases\Rack\Delete\DeleteRackInput;
 use App\UseCases\Rack\QueryList\QueryListRack;
 use App\UseCases\Rack\QueryList\QueryListRackInput;
 use Dedoc\Scramble\Attributes\Response as ScrambleResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 
 class RackController extends Controller
 {
@@ -61,5 +65,19 @@ class RackController extends Controller
         $output = ($queryListRack)($input);
 
         return new RackCollection($output->racks);
+    }
+
+    /**
+     * @throws \Throwable
+     * @throws RackNotFoundException
+     * @throws WarehouseNotFoundException
+     */
+    public function delete(Request $request, DeleteRack $deleteRack): Response
+    {
+        $input = new DeleteRackInput((int) $request->route('warehouseId'), (int) $request->route('rackId'));
+
+        ($deleteRack)($input);
+
+        return response()->noContent();
     }
 }

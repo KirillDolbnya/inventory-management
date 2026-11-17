@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Rack extends Model
 {
@@ -14,6 +15,8 @@ class Rack extends Model
      * @use HasFactory<RackFactory>
      */
     use HasFactory;
+
+    use SoftDeletes;
 
     protected $casts = [
         'warehouse_id' => 'integer',
