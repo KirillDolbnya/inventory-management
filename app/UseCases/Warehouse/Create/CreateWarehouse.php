@@ -3,6 +3,7 @@
 namespace App\UseCases\Warehouse\Create;
 
 use App\Contracts\Addresses\AddressResolver;
+use App\Exceptions\AddressResolverUnavailableException;
 use App\Exceptions\FiasIdAlreadyTakenException;
 use App\Exceptions\FiasIdNotFoundException;
 use App\Exceptions\WarehouseNameAlreadyTakenException;
@@ -19,6 +20,7 @@ class CreateWarehouse
      * @throws WarehouseNameAlreadyTakenException
      * @throws FiasIdAlreadyTakenException
      * @throws FiasIdNotFoundException
+     * @throws AddressResolverUnavailableException
      */
     public function __invoke(CreateWarehouseInput $input): CreateWarehouseOutput
     {

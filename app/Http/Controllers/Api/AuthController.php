@@ -21,7 +21,7 @@ class AuthController extends Controller
     #[ScrambleResponse(
         status: 401,
         description: 'Неверный логин или пароль',
-        type: "array{status: 'error', message: string}"
+        type: 'array{message: string}'
     )]
     public function signIn(SignInRequest $request, SignIn $signIn): JsonResponse
     {
@@ -43,5 +43,17 @@ class AuthController extends Controller
         $request->session()->regenerateToken();
 
         return response()->noContent();
+    }
+
+    #[ScrambleResponse(
+        status: 401,
+        description: 'Пользователь не авторизован',
+        type: 'array{message: string}'
+    )]
+    public function getCurrentUser(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        return response()->json(['id' => $user->id, 'name' => $user->name, 'email' => $user->email]);
     }
 }
