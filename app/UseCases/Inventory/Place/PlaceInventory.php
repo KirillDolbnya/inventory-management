@@ -6,6 +6,7 @@ use App\Exceptions\CannotPlaceToDeletedWarehouseException;
 use App\Exceptions\CellNotFoundException;
 use App\Exceptions\InventoryNotFoundException;
 use App\Exceptions\InventoryPlacementQuantityExceededException;
+use App\Exceptions\RackNotFoundException;
 use App\Repositories\CellRepository;
 use App\Repositories\InventoryRepository;
 use App\Repositories\WarehouseRepository;
@@ -27,14 +28,31 @@ class PlaceInventory
      */
     public function __invoke(PlaceInventoryInput $input): PlaceInventoryOutput
     {
-        return DB::transaction(function () use ($input) {
+        $cell = $this->cellRepository->getById($input->cellId);
+
+        if ($cell === null) {
+            throw new CellNotFoundException;
+        }
+
+        $rack = $cell->rack;
+
+        if ($rack === null) {
+            throw new RackNotFoundException;
+        }
+
+        return DB::transaction(function () use ($input, $cell, $rack) {
             $inventory = $this->inventoryRepository->getByIdForUpdate($input->inventoryId);
 
             if ($inventory === null) {
                 throw new InventoryNotFoundException;
             }
+            $warehouse = $this->warehouseRepository->getByIdForUpdate($rack->warehouse_id);
 
-            $cell = $this->cellRepository->getById($input->cellId);
+            if ($warehouse === null) {
+                throw new CannotPlaceToDeletedWarehouseException;
+            }
+
+            $cell = $this->cellRepository->getById($cell->id);
 
             if ($cell === null) {
                 throw new CellNotFoundException;

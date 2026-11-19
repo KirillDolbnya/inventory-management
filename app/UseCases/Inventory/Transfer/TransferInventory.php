@@ -8,6 +8,7 @@ use App\Exceptions\InsufficientPlacementQuantityException;
 use App\Exceptions\InventoryNotFoundException;
 use App\Exceptions\InventoryPlacementNotFoundException;
 use App\Exceptions\InventoryReservationConflictException;
+use App\Exceptions\RackNotFoundException;
 use App\Exceptions\SameSourceAndTargetCellException;
 use App\Repositories\CellRepository;
 use App\Repositories\EventRepository;
@@ -24,7 +25,7 @@ class TransferInventory
         private readonly CellRepository $cellRepository,
         private readonly EventRepository $eventRepository,
         private readonly InventoryReservationAvailabilityCalculator $inventoryReservationAvailabilityCalculator,
-        private readonly WarehouseRepository $warehouseRepository
+        private readonly WarehouseRepository $warehouseRepository,
     ) {}
 
     /**
@@ -45,7 +46,19 @@ class TransferInventory
             throw new InventoryPlacementNotFoundException;
         }
 
-        return DB::transaction(function () use ($input, $placement) {
+        $cell = $this->cellRepository->getById($input->targetCellId);
+
+        if ($cell === null) {
+            throw new CellNotFoundException;
+        }
+
+        $rack = $cell->rack;
+
+        if ($rack === null) {
+            throw new RackNotFoundException;
+        }
+
+        return DB::transaction(function () use ($input, $placement, $cell, $rack) {
 
             $inventory = $this->inventoryRepository->getByIdForUpdate($placement->inventory_id);
 
@@ -59,18 +72,16 @@ class TransferInventory
                 throw new InventoryPlacementNotFoundException;
             }
 
-            $cell = $this->cellRepository->getById($input->targetCellId);
-
-            if ($cell === null) {
-                throw new CellNotFoundException;
-            }
-
-            $rack = $cell->rack;
-
             $warehouse = $this->warehouseRepository->getByIdForUpdate($rack->warehouse_id);
 
             if ($warehouse === null) {
                 throw new CannotPlaceToDeletedWarehouseException;
+            }
+
+            $cell = $this->cellRepository->getById($cell->id);
+
+            if ($cell === null) {
+                throw new CellNotFoundException;
             }
 
             if ($input->targetCellId === $placement->cell_id) {

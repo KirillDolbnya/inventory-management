@@ -5,6 +5,7 @@ namespace App\Repositories;
 use App\Models\Cell;
 use App\Models\Rack;
 use App\UseCases\Rack\Create\CreateRackItemInput;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -107,8 +108,45 @@ class RackRepository
      * @param  array<int, string>  $codes
      * @return array<int, string>
      */
-    public function findExistingCodes(int $warehouseId, array $codes): array
+    public function findExistingCodes(int $warehouseId, array $codes, ?int $rackId = null): array
     {
-        return Rack::query()->where(['warehouse_id' => $warehouseId])->whereIn('code', $codes)->pluck('code')->all();
+        return Rack::query()->where(['warehouse_id' => $warehouseId])->whereIn('code', $codes)->when($rackId !== null, fn (Builder $query) => $query->whereKeyNot($rackId))->withTrashed()->pluck('code')->all();
+    }
+
+    public function deleteLayoutRack(int $warehouseId): void
+    {
+        Rack::query()->where(['warehouse_id' => $warehouseId])->update([
+            'position_x' => null,
+            'position_y' => null,
+            'position_z' => null,
+            'rotation_y_deg' => null,
+            'width' => null,
+            'depth' => null,
+            'height' => null,
+        ]);
+    }
+
+    public function getByRackIdWithWarehouseId(int $warehouseId, int $rackId): ?Rack
+    {
+        return Rack::query()->where(['warehouse_id' => $warehouseId, 'id' => $rackId])->first();
+    }
+
+    public function delete(Rack $rack): void
+    {
+        $rack->delete();
+    }
+
+    /**
+     * @param array{
+     *     code?: string,
+     *     levels_count?: int,
+     *     cells_per_level?: int
+     * } $updateData
+     */
+    public function update(Rack $rack, array $updateData): Rack
+    {
+        $rack->update($updateData);
+
+        return $rack;
     }
 }

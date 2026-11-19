@@ -29,11 +29,15 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('{warehouseId}/inventories', 'inventories')->name('warehouses-inventories-index')->where('warehouseId', '[0-9]+');
             Route::put('{warehouseId}/layout', 'saveLayout')->name('warehouses-layout')->where('warehouseId', '[0-9]+');
             Route::get('{warehouseId}/layout', 'showLayout')->name('warehouses-get-layout')->where('warehouseId', '[0-9]+');
+            Route::patch('{warehouseId}/layout', 'updateLayout')->name('warehouses-update-layout')->where('warehouseId', '[0-9]+');
+            Route::delete('{warehouseId}/layout', 'deleteLayout')->name('warehouses-delete-layout')->where('warehouseId', '[0-9]+');
         });
 
         Route::controller(RackController::class)->group(function () {
             Route::post('{warehouseId}/racks', 'store')->name('racks-create')->where('warehouseId', '[0-9]+');
             Route::get('{warehouseId}/racks', 'index')->name('racks-index')->where('warehouseId', '[0-9]+');
+            Route::delete('{warehouseId}/racks/{rackId}', 'delete')->name('racks-delete')->where('warehouseId', '[0-9]+')->where('rackId', '[0-9]+');
+            Route::patch('{warehouseId}/racks/{rackId}', 'update')->name('racks-update')->where('warehouseId', '[0-9]+')->where('rackId', '[0-9]+');
         });
     });
 

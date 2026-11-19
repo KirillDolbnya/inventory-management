@@ -1,11 +1,14 @@
 <?php
 
+use App\Exceptions\WarehouseModelUploadFailedException;
 use App\Models\Cell;
+use App\Models\InventoryPlacement;
 use App\Models\Rack;
 use App\Models\User;
 use App\Models\Warehouse;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Exceptions;
 
 use function Pest\Laravel\assertDatabaseHas;
 
@@ -337,6 +340,772 @@ describe('Warehouse layout', function () {
 
         $response->assertJson([
             'message' => 'Unauthenticated.',
+        ]);
+    });
+});
+
+describe('Delete layout', function () {
+    beforeEach(function () {
+        $this->user = User::factory()->create();
+
+        $this->warehouse = Warehouse::factory()->create();
+
+        $this->rack = Rack::factory()->create([
+            'warehouse_id' => $this->warehouse->id,
+        ]);
+
+        $this->cell = Cell::factory()->create([
+            'rack_id' => $this->rack->id,
+        ]);
+
+        $this->rackLayout = [
+            'position_x' => '10.5',
+            'position_y' => '0',
+            'position_z' => '-4.2',
+            'rotation_y_deg' => '90',
+            'width' => '4.05',
+            'depth' => '4.05',
+            'height' => '10',
+        ];
+
+        $this->rackData = array_merge($this->rack->toArray(), $this->rackLayout);
+
+        $this->warehouseWalls = [
+            'walls' => [
+                'outline' => [
+                    ['x' => 0, 'z' => 0],
+                    ['x' => 10, 'z' => 0],
+                    ['x' => 10, 'z' => 4],
+                    ['x' => 4, 'z' => 4],
+                    ['x' => 4, 'z' => 10],
+                    ['x' => 0, 'z' => 10],
+                ],
+            ],
+        ];
+    });
+
+    it('deletes the layout of an unoccupied warehouse', function () {
+        $storage = Storage::fake('public');
+        $fakeFile = UploadedFile::fake()->create('warehouse_map.glb', 500);
+        $savedPath = $fakeFile->store('models', 'public');
+
+        $this->warehouse->update(array_merge($this->warehouseWalls, [
+            'model_path' => $savedPath,
+        ]));
+
+        $this->rack->upsert(
+            [array_merge(['id' => $this->rack->id], $this->rackData)],
+            ['id'],
+            ['position_x', 'position_y', 'position_z', 'rotation_y_deg', 'width', 'depth', 'height']
+        );
+
+        $response = $this->be($this->user)->deleteJson(route('warehouses-delete-layout', $this->warehouse->id));
+
+        $response->assertStatus(204);
+
+        assertDatabaseHas('warehouses', [
+            'id' => $this->warehouse->id,
+            'walls' => null,
+            'model_path' => null,
+            'deleted_at' => null,
+        ]);
+
+        Storage::disk('public')->assertMissing($savedPath);
+
+        assertDatabaseHas('racks', [
+            'id' => $this->rack->id,
+            'position_x' => null,
+            'position_y' => null,
+            'position_z' => null,
+            'rotation_y_deg' => null,
+            'width' => null,
+            'depth' => null,
+            'height' => null,
+        ]);
+
+        assertDatabaseHas('cells', [
+            'id' => $this->cell->id,
+            'rack_id' => $this->rack->id,
+        ]);
+    });
+
+    it('returns 204 when no layout has been saved', function () {
+        $response = $this->be($this->user)->deleteJson(route('warehouses-delete-layout', $this->warehouse->id));
+
+        $response->assertStatus(204);
+
+        assertDatabaseHas('warehouses', [
+            'id' => $this->warehouse->id,
+            'walls' => null,
+            'model_path' => null,
+            'deleted_at' => null,
+        ]);
+
+        assertDatabaseHas('racks', [
+            'id' => $this->rack->id,
+            'position_x' => null,
+            'position_y' => null,
+            'position_z' => null,
+            'rotation_y_deg' => null,
+            'width' => null,
+            'depth' => null,
+            'height' => null,
+        ]);
+    });
+
+    it('rejects deleting the layout of a warehouse with inventory placements', function () {
+        $storage = Storage::fake('public');
+        $fakeFile = UploadedFile::fake()->create('warehouse_map.glb', 500);
+        $savedPath = $fakeFile->store('models', 'public');
+
+        $this->warehouse->update(array_merge($this->warehouseWalls, [
+            'model_path' => $savedPath,
+        ]));
+
+        $this->rack->upsert(
+            [array_merge(['id' => $this->rack->id], $this->rackData)],
+            ['id'],
+            ['position_x', 'position_y', 'position_z', 'rotation_y_deg', 'width', 'depth', 'height']
+        );
+
+        $placement = InventoryPlacement::factory()->create([
+            'cell_id' => $this->cell->id,
+        ]);
+
+        $response = $this->be($this->user)->deleteJson(route('warehouses-delete-layout', $this->warehouse->id));
+
+        $response->assertStatus(409);
+
+        $this->assertDatabaseHas('warehouses', [
+            'id' => $this->warehouse->id,
+            'walls' => json_encode(['outline' => $this->warehouseWalls['walls']['outline']]),
+            'model_path' => $savedPath,
+            'deleted_at' => null,
+        ]);
+
+        Storage::disk('public')->assertExists($savedPath);
+
+        assertDatabaseHas('racks', array_merge(
+            ['id' => $this->rack->id],
+            $this->rackLayout
+        ));
+
+        assertDatabaseHas('inventory_placements', [
+            'id' => $placement->id,
+            'inventory_id' => $placement->inventory_id,
+            'cell_id' => $this->cell->id,
+            'quantity' => $placement->quantity,
+        ]);
+    });
+
+    it('returns 404 when deleting a layout for a nonexistent warehouse', function () {
+        $response = $this->be($this->user)->deleteJson(route('warehouses-delete-layout', $this->warehouse->id + 1000));
+
+        $response->assertStatus(404);
+
+        assertDatabaseHas('warehouses', [
+            'id' => $this->warehouse->id,
+            'walls' => null,
+            'model_path' => null,
+            'deleted_at' => null,
+        ]);
+
+        assertDatabaseHas('racks', [
+            'id' => $this->rack->id,
+            'position_x' => null,
+            'position_y' => null,
+            'position_z' => null,
+            'rotation_y_deg' => null,
+            'width' => null,
+            'depth' => null,
+            'height' => null,
+        ]);
+    });
+
+    it('rejects deleting a layout without authentication', function () {
+        $response = $this->deleteJson(route('warehouses-delete-layout', $this->warehouse->id));
+
+        $response->assertStatus(401);
+
+        $response->assertJson([
+            'message' => 'Unauthenticated.',
+        ]);
+    });
+});
+
+describe('Update layout', function () {
+    beforeEach(function () {
+        $this->user = User::factory()->create();
+
+        $this->storage = Storage::fake('public');
+        $fakeFile = UploadedFile::fake()->create('warehouse_map.glb', 500);
+        $this->savedPath = $fakeFile->store('models', 'public');
+
+        $this->warehouse = Warehouse::factory()->create([
+            'model_path' => $this->savedPath,
+            'walls' => [
+                'outline' => [
+                    ['x' => 0, 'z' => 0],
+                    ['x' => 10, 'z' => 0],
+                    ['x' => 10, 'z' => 4],
+                    ['x' => 4, 'z' => 4],
+                    ['x' => 4, 'z' => 10],
+                    ['x' => 0, 'z' => 10],
+                ],
+            ],
+        ]);
+
+        $this->rack = Rack::factory()->create([
+            'warehouse_id' => $this->warehouse->id,
+            'position_x' => '10.5',
+            'position_y' => '0',
+            'position_z' => '-4.2',
+            'rotation_y_deg' => '90',
+            'width' => '4.05',
+            'depth' => '4.05',
+            'height' => '10',
+        ]);
+    });
+
+    it('updates the model file, wall outline, and rack geometry in one request', function () {
+        $otherFakeFile = UploadedFile::fake()->create('warehouse_map2.glb', 500);
+
+        $walls = [
+            'outline' => [
+                ['x' => 1, 'z' => 0],
+                ['x' => 10, 'z' => 0],
+                ['x' => 10, 'z' => 4],
+                ['x' => 4, 'z' => 4],
+                ['x' => 4, 'z' => 10],
+                ['x' => 1, 'z' => 10],
+            ],
+        ];
+
+        $racks = [
+            'id' => $this->rack->id,
+            'position_x' => '11.5',
+            'position_y' => '0',
+            'position_z' => '-3.2',
+            'rotation_y_deg' => '80',
+            'width' => '4',
+            'depth' => '4.1',
+            'height' => '12',
+        ];
+
+        $response = $this->be($this->user)->patchJson(route('warehouses-update-layout', $this->warehouse->id), [
+            'model_path' => $otherFakeFile,
+            'racks' => [
+                $racks,
+            ],
+            'walls' => $walls,
+        ]);
+
+        $response->assertStatus(200);
+
+        $this->warehouse->refresh();
+        $this->rack->refresh();
+
+        $response->assertJson([
+            'data' => [
+                'id' => $this->warehouse->id,
+                'walls' => $walls,
+                'model' => [
+                    'url' => $this->storage->url($this->warehouse->model_path),
+                    'format' => $this->warehouse::FORMAT,
+                    'unit' => $this->warehouse::UNIT,
+                    'origin' => $this->warehouse::ORIGIN,
+                ],
+                'racks' => [
+                    [
+                        'id' => $this->rack->id,
+                        'code' => $this->rack->code,
+                        'position' => [
+                            'x' => $racks['position_x'],
+                            'y' => $racks['position_y'],
+                            'z' => $racks['position_z'],
+                        ],
+                        'rotation_y_deg' => $racks['rotation_y_deg'],
+                        'dimensions' => [
+                            'width' => $racks['width'],
+                            'height' => $racks['height'],
+                            'depth' => $racks['depth'],
+                        ],
+                        'levels_count' => $this->rack->levels_count,
+                        'cells_per_level' => $this->rack->cells_per_level,
+                    ],
+                ],
+            ],
+        ]);
+
+        $this->storage->assertExists($this->warehouse->model_path);
+        $this->storage->assertMissing($this->savedPath);
+
+        assertDatabaseHas('warehouses', [
+            'id' => $this->warehouse->id,
+            'model_path' => $this->warehouse->model_path,
+            'walls' => json_encode($walls),
+        ]);
+
+        assertDatabaseHas('racks', $racks);
+    });
+
+    it('replaces the model file and preserves the walls and rack geometry', function () {
+        $walls = [
+            'outline' => [
+                ['x' => 0, 'z' => 0],
+                ['x' => 10, 'z' => 0],
+                ['x' => 10, 'z' => 4],
+                ['x' => 4, 'z' => 4],
+                ['x' => 4, 'z' => 10],
+                ['x' => 0, 'z' => 10],
+            ],
+        ];
+
+        $otherFakeFile = UploadedFile::fake()->create('warehouse_map2.glb', 500);
+
+        $response = $this->be($this->user)->patchJson(route('warehouses-update-layout', $this->warehouse->id), [
+            'model_path' => $otherFakeFile,
+        ]);
+
+        $response->assertStatus(200);
+
+        $this->warehouse->refresh();
+
+        $this->storage->assertExists($this->warehouse->model_path);
+        $this->storage->assertMissing($this->savedPath);
+
+        assertDatabaseHas('warehouses', [
+            'id' => $this->warehouse->id,
+            'model_path' => $this->warehouse->model_path,
+            'walls' => json_encode($walls),
+        ]);
+
+        assertDatabaseHas('racks', [
+            'id' => $this->rack->id,
+            'position_x' => $this->rack->position_x,
+            'position_y' => $this->rack->position_y,
+            'position_z' => $this->rack->position_z,
+            'rotation_y_deg' => $this->rack->rotation_y_deg,
+            'width' => $this->rack->width,
+            'depth' => $this->rack->depth,
+            'height' => $this->rack->height,
+        ]);
+    });
+
+    it('updates the wall outline and preserves the model file and rack geometry', function () {
+        $walls = [
+            'outline' => [
+                ['x' => 1, 'z' => 0],
+                ['x' => 10, 'z' => 0],
+                ['x' => 10, 'z' => 4],
+                ['x' => 4, 'z' => 4],
+                ['x' => 4, 'z' => 10],
+                ['x' => 1, 'z' => 10],
+            ],
+        ];
+
+        $response = $this->be($this->user)->patchJson(route('warehouses-update-layout', $this->warehouse->id), [
+            'walls' => $walls,
+        ]);
+
+        $response->assertStatus(200);
+
+        $this->warehouse->refresh();
+
+        expect($this->warehouse->model_path)->toBe($this->savedPath);
+        $this->storage->assertExists($this->warehouse->model_path);
+
+        assertDatabaseHas('warehouses', [
+            'id' => $this->warehouse->id,
+            'walls' => json_encode($walls),
+        ]);
+
+        assertDatabaseHas('racks', [
+            'id' => $this->rack->id,
+            'position_x' => $this->rack->position_x,
+            'position_y' => $this->rack->position_y,
+            'position_z' => $this->rack->position_z,
+            'rotation_y_deg' => $this->rack->rotation_y_deg,
+            'width' => $this->rack->width,
+            'depth' => $this->rack->depth,
+            'height' => $this->rack->height,
+        ]);
+    });
+
+    it('updates the selected rack geometry and preserves the other rack', function () {
+        $otherRack = Rack::factory()->create([
+            'warehouse_id' => $this->warehouse->id,
+            'position_x' => '9.5',
+            'position_y' => '1',
+            'position_z' => '-2.2',
+            'rotation_y_deg' => '70',
+            'width' => '5.1',
+            'depth' => '5',
+            'height' => '10',
+        ]);
+
+        $otherRackData = [
+            'id' => $otherRack->id,
+            'position_x' => '9.5',
+            'position_y' => '1',
+            'position_z' => '-2.2',
+            'rotation_y_deg' => '70',
+            'width' => '5.1',
+            'depth' => '5',
+            'height' => '10',
+        ];
+
+        $racks = [
+            'id' => $this->rack->id,
+            'position_x' => '11.5',
+            'position_y' => '0',
+            'position_z' => '-3.2',
+            'rotation_y_deg' => '80',
+            'width' => '4',
+            'depth' => '4.1',
+            'height' => '12',
+        ];
+
+        $response = $this->be($this->user)->patchJson(route('warehouses-update-layout', $this->warehouse->id), [
+            'racks' => [
+                $racks,
+            ],
+        ]);
+
+        $response->assertStatus(200);
+
+        $this->rack->refresh();
+
+        $this->storage->assertExists($this->warehouse->model_path);
+
+        assertDatabaseHas('warehouses', [
+            'id' => $this->warehouse->id,
+            'model_path' => $this->warehouse->model_path,
+            'walls' => json_encode(['outline' => $this->warehouse->walls['outline']]),
+        ]);
+
+        assertDatabaseHas('racks', $racks);
+        assertDatabaseHas('racks', $otherRackData);
+    });
+
+    it('rejects an invalid layout update payload', function (array $payload, string $errorKey, string $extendMessage) {
+        $response = $this->be($this->user)->patchJson(route('warehouses-update-layout', $this->warehouse->id), $payload);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors([
+                $errorKey => $extendMessage,
+            ]);
+
+        $this->storage->assertExists($this->warehouse->model_path);
+
+        assertDatabaseHas('warehouses', [
+            'id' => $this->warehouse->id,
+            'model_path' => $this->warehouse->model_path,
+            'walls' => json_encode(['outline' => $this->warehouse->walls['outline']]),
+        ]);
+
+        assertDatabaseHas('racks', [
+            'id' => $this->rack->id,
+            'position_x' => $this->rack->position_x,
+            'position_y' => $this->rack->position_y,
+            'position_z' => $this->rack->position_z,
+            'rotation_y_deg' => $this->rack->rotation_y_deg,
+            'width' => $this->rack->width,
+            'depth' => $this->rack->depth,
+            'height' => $this->rack->height,
+        ]);
+    })->with([
+        'model_path: не файл' => [
+            ['model_path' => 'just-string'],
+            'model_path',
+            'Загружаемый объект должен быть валидным файлом.',
+        ],
+        'model_path: неверное расширение' => [
+            fn () => ['model_path' => UploadedFile::fake()->create('image.png', 500)],
+            'model_path',
+            'Файл модели должен иметь расширение .glb.',
+        ],
+        'model_path: превышен максимальный размер' => [
+            fn () => ['model_path' => UploadedFile::fake()->create('map.glb', 2049)],
+            'model_path',
+            'Размер файла 3D-модели не должен превышать 2 МБ (2048 КБ).',
+        ],
+        'racks: не список' => [
+            ['racks' => 'not-an-array'],
+            'racks',
+            'Список стеллажей должен быть последовательным массивом.',
+        ],
+        'racks: пропущен обязательный ID' => [
+            ['racks' => [['position_x' => 10, 'position_y' => 0, 'position_z' => 5]]],
+            'racks.0.id',
+            'ID стеллажа обязателен.',
+        ],
+        'racks: ID не число' => [
+            ['racks' => [['id' => 'string-id', 'position_x' => 1]]],
+            'racks.0.id',
+            'ID стеллажа должен быть целым числом.',
+        ],
+        'racks: ID меньше 1' => [
+            ['racks' => [['id' => 0, 'position_x' => 1]]],
+            'racks.0.id',
+            'Неверный ID стеллажа.',
+        ],
+        'racks: дубликаты ID' => [
+            ['racks' => [['id' => 5, 'position_x' => 1], ['id' => 5, 'position_x' => 2]]],
+            'racks.0.id',
+            'ID стеллажей не могут дублироваться',
+        ],
+        'racks: пропущена координата X' => [
+            ['racks' => [['id' => 1, 'position_y' => 0, 'position_z' => 0]]],
+            'racks.0.position_x',
+            'Координата Position X обязательна.',
+        ],
+        'racks: координата X не число' => [
+            ['racks' => [['id' => 1, 'position_x' => 'not-numeric']]],
+            'racks.0.position_x',
+            'Координата Position X должна быть числом.',
+        ],
+        'racks: угол поворота выходит за диапазон' => [
+            ['racks' => [['id' => 1, 'position_x' => 1, 'position_y' => 0, 'position_z' => 0, 'rotation_y_deg' => 361]]],
+            'racks.0.rotation_y_deg',
+            'Угол поворота должен быть в диапазоне от -360 до 360 градусов.',
+        ],
+        'racks: ширина меньше или равна 0' => [
+            ['racks' => [['id' => 1, 'position_x' => 1, 'position_y' => 0, 'position_z' => 0, 'rotation_y_deg' => 90, 'width' => 0]]],
+            'racks.0.width',
+            'Ширина стеллажа должна быть больше 0.',
+        ],
+        'walls: outline обязателен, если есть walls' => [
+            ['walls' => []],
+            'walls.outline',
+            'Контур стен помещения обязателен для заполнения.',
+        ],
+        'walls: менее 3-х точек' => [
+            ['walls' => ['outline' => [['x' => 0, 'z' => 0], ['x' => 10, 'z' => 0]]]],
+            'walls.outline',
+            'Контур помещения должен содержать как минимум 3 точки для построения 3D-геометрии.',
+        ],
+        'walls: пропущен параметр X в точке' => [
+            ['walls' => ['outline' => [['z' => 0], ['x' => 10, 'z' => 0], ['x' => 10, 'z' => 10]]]],
+            'walls.outline.0.x',
+            'Координата X является обязательной для каждой точки контура.',
+        ],
+        'walls: стена нулевой длины' => [
+            ['walls' => ['outline' => [['x' => 0, 'z' => 0], ['x' => 0, 'z' => 0], ['x' => 10, 'z' => 10]]]],
+            'walls.outline',
+            'Обнаружена стена нулевой длины. Точка #0 совпадает со следующей.',
+        ],
+        'walls: нулевая площадь' => [
+            ['walls' => ['outline' => [['x' => 0, 'z' => 0], ['x' => 5, 'z' => 0], ['x' => 10, 'z' => 0]]]],
+            'walls.outline',
+            'Помещение имеет нулевую площадь. Все точки контура не могут лежать на одной прямой.',
+        ],
+        'walls: самопересечение стен' => [
+            ['walls' => ['outline' => [
+                ['x' => 0, 'z' => 0],
+                ['x' => 10, 'z' => 0],
+                ['x' => 10, 'z' => 10],
+                ['x' => -5, 'z' => 5],
+                ['x' => 5, 'z' => -5],
+            ]]],
+            'walls.outline',
+            'Стены помещения пересекают друг друга между отрезками (0—1) и (3—4).',
+        ],
+    ]);
+
+    it('returns 500 and keeps the existing model file when the upload fails', function () {
+        Storage::shouldReceive('disk')
+            ->with('public')
+            ->andReturnSelf();
+
+        Storage::shouldReceive('putFileAs')
+            ->andReturn(false);
+
+        Exceptions::fake();
+
+        $otherFakeFile = UploadedFile::fake()->create('warehouse_map2.glb', 500);
+
+        $response = $this->be($this->user)->patchJson(route('warehouses-update-layout', $this->warehouse->id), [
+            'model_path' => $otherFakeFile,
+        ]);
+
+        $response->assertStatus(500);
+
+        $response->assertJson([
+            'message' => 'Не удалось сохранить файл, попробуйте еще раз.',
+        ]);
+
+        Exceptions::assertReported(WarehouseModelUploadFailedException::class);
+
+        $notSavedPath = 'models/'.$otherFakeFile->hashName();
+
+        $this->storage->assertMissing($notSavedPath);
+        $this->storage->assertExists($this->warehouse->model_path);
+    });
+
+    it('returns 404 and removes the uploaded model file when a rack is missing', function () {
+        $otherFakeFile = UploadedFile::fake()->create('warehouse_map2.glb', 500);
+
+        $racks = [
+            'id' => $this->rack->id + 1000,
+            'position_x' => '10.5',
+            'position_y' => '0',
+            'position_z' => '-4.2',
+            'rotation_y_deg' => '90',
+            'width' => '4.05',
+            'depth' => '4.05',
+            'height' => '10',
+        ];
+
+        $response = $this->be($this->user)->patchJson(route('warehouses-update-layout', $this->warehouse->id), [
+            'model_path' => $otherFakeFile,
+            'racks' => [
+                $racks,
+            ],
+        ]);
+
+        $response->assertStatus(404);
+
+        $notSavedPath = 'models/'.$otherFakeFile->hashName();
+
+        $this->storage->assertMissing($notSavedPath);
+        $this->storage->assertExists($this->warehouse->model_path);
+
+        assertDatabaseHas('warehouses', [
+            'id' => $this->warehouse->id,
+            'model_path' => $this->warehouse->model_path,
+            'walls' => json_encode(['outline' => $this->warehouse->walls['outline']]),
+        ]);
+
+        assertDatabaseHas('racks', [
+            'id' => $this->rack->id,
+            'position_x' => $this->rack->position_x,
+            'position_y' => $this->rack->position_y,
+            'position_z' => $this->rack->position_z,
+            'rotation_y_deg' => $this->rack->rotation_y_deg,
+            'width' => $this->rack->width,
+            'depth' => $this->rack->depth,
+            'height' => $this->rack->height,
+        ]);
+    });
+
+    it('returns 404 when updating the layout of a nonexistent warehouse', function () {
+        $otherFakeFile = UploadedFile::fake()->create('warehouse_map2.glb', 500);
+
+        $walls = [
+            'outline' => [
+                ['x' => 1, 'z' => 0],
+                ['x' => 10, 'z' => 0],
+                ['x' => 10, 'z' => 4],
+                ['x' => 4, 'z' => 4],
+                ['x' => 4, 'z' => 10],
+                ['x' => 1, 'z' => 10],
+            ],
+        ];
+
+        $racks = [
+            'id' => $this->rack->id,
+            'position_x' => '10.5',
+            'position_y' => '0',
+            'position_z' => '-4.2',
+            'rotation_y_deg' => '90',
+            'width' => '4.05',
+            'depth' => '4.05',
+            'height' => '10',
+        ];
+
+        $response = $this->be($this->user)->patchJson(route('warehouses-update-layout', $this->warehouse->id + 1000), [
+            'model_path' => $otherFakeFile,
+            'racks' => [
+                $racks,
+            ],
+            'walls' => $walls,
+        ]);
+
+        $response->assertStatus(404);
+
+        $notSavedPath = 'models/'.$otherFakeFile->hashName();
+
+        $this->storage->assertMissing($notSavedPath);
+        $this->storage->assertExists($this->warehouse->model_path);
+
+        assertDatabaseHas('warehouses', [
+            'id' => $this->warehouse->id,
+            'model_path' => $this->warehouse->model_path,
+            'walls' => json_encode(['outline' => $this->warehouse->walls['outline']]),
+        ]);
+
+        assertDatabaseHas('racks', [
+            'id' => $this->rack->id,
+            'position_x' => $this->rack->position_x,
+            'position_y' => $this->rack->position_y,
+            'position_z' => $this->rack->position_z,
+            'rotation_y_deg' => $this->rack->rotation_y_deg,
+            'width' => $this->rack->width,
+            'depth' => $this->rack->depth,
+            'height' => $this->rack->height,
+        ]);
+    });
+
+    it('rejects an unauthenticated layout update', function () {
+        $otherFakeFile = UploadedFile::fake()->create('warehouse_map2.glb', 500);
+
+        $walls = [
+            'outline' => [
+                ['x' => 1, 'z' => 0],
+                ['x' => 10, 'z' => 0],
+                ['x' => 10, 'z' => 4],
+                ['x' => 4, 'z' => 4],
+                ['x' => 4, 'z' => 10],
+                ['x' => 1, 'z' => 10],
+            ],
+        ];
+
+        $racks = [
+            'id' => $this->rack->id,
+            'position_x' => '10.5',
+            'position_y' => '0',
+            'position_z' => '-4.2',
+            'rotation_y_deg' => '90',
+            'width' => '4.05',
+            'depth' => '4.05',
+            'height' => '10',
+        ];
+
+        $response = $this->patchJson(route('warehouses-update-layout', $this->warehouse->id), [
+            'model_path' => $otherFakeFile,
+            'racks' => [
+                $racks,
+            ],
+            'walls' => $walls,
+        ]);
+
+        $response->assertStatus(401);
+
+        $response->assertJson([
+            'message' => 'Unauthenticated.',
+        ]);
+
+        $notSavedPath = 'models/'.$otherFakeFile->hashName();
+
+        $this->storage->assertMissing($notSavedPath);
+        $this->storage->assertExists($this->warehouse->model_path);
+
+        assertDatabaseHas('warehouses', [
+            'id' => $this->warehouse->id,
+            'model_path' => $this->warehouse->model_path,
+            'walls' => json_encode(['outline' => $this->warehouse->walls['outline']]),
+        ]);
+
+        assertDatabaseHas('racks', [
+            'id' => $this->rack->id,
+            'position_x' => $this->rack->position_x,
+            'position_y' => $this->rack->position_y,
+            'position_z' => $this->rack->position_z,
+            'rotation_y_deg' => $this->rack->rotation_y_deg,
+            'width' => $this->rack->width,
+            'depth' => $this->rack->depth,
+            'height' => $this->rack->height,
         ]);
     });
 });

@@ -5,6 +5,7 @@ namespace App\UseCases\Inventory\Create;
 use App\Exceptions\CannotPlaceToDeletedWarehouseException;
 use App\Exceptions\CellNotFoundException;
 use App\Exceptions\InventoryNameAlreadyTakenException;
+use App\Exceptions\RackNotFoundException;
 use App\Repositories\CellRepository;
 use App\Repositories\InventoryRepository;
 use App\Repositories\WarehouseRepository;
@@ -29,22 +30,37 @@ class CreateInventory
             throw new InventoryNameAlreadyTakenException;
         }
 
-        $inventory = DB::transaction(function () use ($input) {
+        $cell = null;
+        $rack = null;
+
+        if ($input->cellId !== null) {
+            $cell = $this->cellRepository->getById($input->cellId);
+
+            if ($cell === null) {
+                throw new CellNotFoundException;
+            }
+
+            $rack = $cell->rack;
+
+            if ($rack === null) {
+                throw new RackNotFoundException;
+            }
+        }
+
+        $inventory = DB::transaction(function () use ($input, $cell, $rack) {
             $inventory = $this->inventoryRepository->create($input->name, $input->description, $input->quantity);
 
             if ($input->cellId !== null) {
-                $cell = $this->cellRepository->getById($input->cellId);
-
-                if ($cell === null) {
-                    throw new CellNotFoundException;
-                }
-
-                $rack = $cell->rack;
-
                 $warehouse = $this->warehouseRepository->getByIdForUpdate($rack->warehouse_id);
 
                 if ($warehouse === null) {
                     throw new CannotPlaceToDeletedWarehouseException;
+                }
+
+                $cell = $this->cellRepository->getById($input->cellId);
+
+                if ($cell === null) {
+                    throw new CellNotFoundException;
                 }
 
                 $this->inventoryRepository->assignToCell($input->cellId, $inventory);
