@@ -87,9 +87,15 @@ class EventRepository
                 $query->orderBy('id', 'asc');
             },
 
-            'eventInventoryReservations.inventory',
-            'eventInventoryReservations.cell',
-            'eventInventoryReservations.cell.rack',
+            'eventInventoryReservations.inventory' => function ($query) {
+                $query->withTrashed();
+            },
+            'eventInventoryReservations.cell' => function ($query) {
+                $query->withTrashed();
+            },
+            'eventInventoryReservations.cell.rack' => function ($query) {
+                $query->withTrashed();
+            },
             'eventInventoryReservations.cell.rack.warehouse' => function ($query) {
                 $query->withTrashed();
             },
