@@ -79,6 +79,14 @@ class EventController extends Controller
             'description' => $output->description,
             'starts_at' => $output->startsAt,
             'ends_at' => $output->endsAt,
+            /**
+             * @var list<array{
+             *     id: int,
+             *     inventory_id: int,
+             *     cell_id: int,
+             *     quantity: int
+             * }>
+             */
             'reservations' => array_map(function ($reservation) {
                 return [
                     'id' => $reservation->id,
