@@ -137,6 +137,14 @@ class RackRepository
     }
 
     /**
+     * @param  list<int>  $rackIds
+     */
+    public function deleteRacks(array $rackIds): void
+    {
+        Rack::query()->whereIn('id', $rackIds)->delete();
+    }
+
+    /**
      * @param array{
      *     code?: string,
      *     levels_count?: int,

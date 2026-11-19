@@ -58,6 +58,14 @@ class PlaceInventory
                 throw new CellNotFoundException;
             }
 
+            $rack = $cell->rack;
+
+            $warehouse = $this->warehouseRepository->getByIdForUpdate($rack->warehouse_id);
+
+            if ($warehouse === null) {
+                throw new CannotPlaceToDeletedWarehouseException;
+            }
+
             $placedQuantity = $inventory->inventoryPlacements->sum('quantity');
             $remainderQuantity = $inventory->quantity - $placedQuantity;
 

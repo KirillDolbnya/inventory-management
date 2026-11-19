@@ -32,6 +32,12 @@ class CreateRacks
         $this->ensureRackCodesAreAvailable($warehouse->id, $input->items);
 
         return DB::transaction(function () use ($warehouse, $input) {
+            $warehouse = $this->warehouseRepository->getByIdForUpdate($warehouse->id);
+
+            if ($warehouse === null) {
+                throw new WarehouseNotFoundException;
+            }
+
             $racks = $this->rackRepository->createRacks($warehouse->id, $input->items);
             $this->rackRepository->createCells($this->buildCellAttributes($racks));
 
