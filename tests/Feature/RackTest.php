@@ -652,3 +652,694 @@ describe('Delete rack and cells', function () {
         }
     });
 });
+
+describe('Update rack and cell', function () {
+    beforeEach(function () {
+        $this->user = User::factory()->create();
+
+        $this->warehouse = Warehouse::factory()->create();
+        $this->rack = Rack::factory()->create([
+            'warehouse_id' => $this->warehouse->id,
+            'levels_count' => 2,
+            'cells_per_level' => 3,
+        ]);
+
+        $cellsPerLevel = 3;
+
+        $this->cells = Cell::factory()->count(6)
+            ->sequence(fn ($sequence) => [
+                'number' => $sequence->index + 1,
+                'level' => (int) ($sequence->index / $cellsPerLevel) + 1,
+                'position' => ($sequence->index % $cellsPerLevel) + 1,
+            ])
+            ->create([
+                'rack_id' => $this->rack->id,
+            ]);
+    });
+
+    it('updates the code and expands the rack structure', function () {
+        $response = $this->be($this->user)->patchJson(route('racks-update', [$this->warehouse->id, $this->rack->id]), [
+            'code' => 'ST-01',
+            'levels_count' => 3,
+            'cells_per_level' => 4,
+        ]);
+
+        $response->assertStatus(200);
+
+        $response->assertJsonStructure([
+            'id',
+            'code',
+            'levels_count',
+            'cells_per_level',
+            'cells' => [
+                '*' => [
+                    'id',
+                    'number',
+                    'level',
+                    'position',
+                ],
+            ],
+        ]);
+
+        $response->assertJsonCount(12, 'cells');
+
+        assertDatabaseHas('racks', [
+            'id' => $this->rack->id,
+            'code' => 'ST-01',
+            'levels_count' => 3,
+            'cells_per_level' => 4,
+        ]);
+
+        $expectedCells = $response->json('cells');
+        $expectedCellsCount = $response->json('levels_count') * $response->json('cells_per_level');
+
+        $expectedCellsNumber = collect($expectedCells)->map(function ($cell) {
+            return $cell['number'];
+        })->all();
+
+        expect($expectedCellsNumber)->toBe(range(1, $expectedCellsCount));
+
+        foreach ($expectedCells as $expectedCell) {
+            expect($expectedCell['level'])->toBeGreaterThanOrEqual(1)
+                ->and($expectedCell['level'])->toBeLessThanOrEqual(3)
+                ->and($expectedCell['position'])->toBeGreaterThanOrEqual(1)
+                ->and($expectedCell['position'])->toBeLessThanOrEqual(4);
+
+            assertDatabaseHas('cells', [
+                'id' => $expectedCell['id'],
+                'number' => $expectedCell['number'],
+                'level' => $expectedCell['level'],
+                'position' => $expectedCell['position'],
+            ]);
+        }
+    });
+
+    it('reduces the number of levels and cells per level', function () {
+        $response = $this->be($this->user)->patchJson(route('racks-update', [$this->warehouse->id, $this->rack->id]), [
+            'levels_count' => 1,
+            'cells_per_level' => 2,
+        ]);
+
+        $response->assertStatus(200);
+
+        $response->assertJsonCount(2, 'cells');
+
+        $expectedCells = $response->json('cells');
+        $expectedCellsCount = $response->json('levels_count') * $response->json('cells_per_level');
+        $expectedCellIds = collect($expectedCells)->pluck('id')->all();
+        $deletedCells = $this->cells->whereNotIn('id', $expectedCellIds);
+
+        $expectedCellsNumber = collect($expectedCells)->map(function ($cell) {
+            return $cell['number'];
+        })->all();
+
+        expect($expectedCellsNumber)->toBe(range(1, $expectedCellsCount));
+
+        foreach ($expectedCells as $expectedCell) {
+            expect($expectedCell['level'])->toBe(1)
+                ->and($expectedCell['position'])->toBeGreaterThanOrEqual(1)
+                ->and($expectedCell['position'])->toBeLessThanOrEqual(2);
+
+            assertDatabaseHas('cells', [
+                'id' => $expectedCell['id'],
+                'number' => $expectedCell['number'],
+                'level' => $expectedCell['level'],
+                'position' => $expectedCell['position'],
+            ]);
+        }
+
+        foreach ($deletedCells as $deletedCell) {
+            assertSoftDeleted('cells', [
+                'id' => $deletedCell->id,
+            ]);
+        }
+    });
+
+    it('updates the rack code and preserves its cells', function () {
+        $response = $this->be($this->user)->patchJson(route('racks-update', [$this->warehouse->id, $this->rack->id]), [
+            'code' => 'ST-01',
+        ]);
+
+        $response->assertStatus(200);
+
+        $response->assertJsonCount($this->cells->count(), 'cells');
+
+        assertDatabaseHas('racks', [
+            'id' => $this->rack->id,
+            'code' => 'ST-01',
+        ]);
+
+        foreach ($this->cells as $cell) {
+            assertDatabaseHas('cells', [
+                'id' => $cell->id,
+                'number' => $cell->number,
+                'level' => $cell->level,
+                'position' => $cell->position,
+                'deleted_at' => null,
+            ]);
+        }
+    });
+
+    it('reduces the number of levels and archives removed cells', function () {
+        $response = $this->be($this->user)->patchJson(route('racks-update', [$this->warehouse->id, $this->rack->id]), [
+            'code' => $this->rack->code,
+            'levels_count' => 1,
+        ]);
+
+        $response->assertStatus(200);
+
+        $response->assertJsonCount(3, 'cells');
+
+        assertDatabaseHas('racks', [
+            'id' => $this->rack->id,
+            'levels_count' => 1,
+        ]);
+
+        $expectedCells = $response->json('cells');
+        $expectedCellIds = collect($expectedCells)->pluck('id')->all();
+        $deletedCells = $this->cells->whereNotIn('id', $expectedCellIds);
+
+        foreach ($expectedCells as $expectedCell) {
+            expect($expectedCell['level'])->toBeGreaterThanOrEqual(1)
+                ->and($expectedCell['position'])->toBeGreaterThanOrEqual(1)
+                ->and($expectedCell['position'])->toBeLessThanOrEqual(3);
+
+            assertDatabaseHas('cells', [
+                'id' => $expectedCell['id'],
+                'number' => $expectedCell['number'],
+                'level' => $expectedCell['level'],
+                'position' => $expectedCell['position'],
+            ]);
+        }
+
+        foreach ($deletedCells as $deletedCell) {
+            assertSoftDeleted('cells', [
+                'id' => $deletedCell->id,
+                'number' => $deletedCell->number,
+                'level' => $deletedCell->level,
+                'position' => $deletedCell->position,
+            ]);
+        }
+    });
+
+    it('reduces cells per level and renumbers remaining cells', function () {
+        $response = $this->be($this->user)->patchJson(route('racks-update', [$this->warehouse->id, $this->rack->id]), [
+            'cells_per_level' => 2,
+        ]);
+
+        $response->assertStatus(200);
+
+        $response->assertJsonCount(4, 'cells');
+
+        $expectedCells = $response->json('cells');
+        $expectedCellsCount = $response->json('levels_count') * $response->json('cells_per_level');
+        $expectedCellIds = collect($expectedCells)->pluck('id')->all();
+        $deletedCells = $this->cells->whereNotIn('id', $expectedCellIds);
+
+        $expectedCellsNumber = collect($expectedCells)->map(function ($cell) {
+            return $cell['number'];
+        })->all();
+
+        expect($expectedCellsNumber)->toBe(range(1, $expectedCellsCount));
+
+        foreach ($expectedCells as $expectedCell) {
+            expect($expectedCell['level'])->toBeGreaterThanOrEqual(1)
+                ->and($expectedCell['level'])->toBeLessThanOrEqual(2)
+                ->and($expectedCell['position'])->toBeGreaterThanOrEqual(1)
+                ->and($expectedCell['position'])->toBeLessThanOrEqual(2);
+
+            assertDatabaseHas('cells', [
+                'id' => $expectedCell['id'],
+                'number' => $expectedCell['number'],
+                'level' => $expectedCell['level'],
+                'position' => $expectedCell['position'],
+            ]);
+        }
+
+        foreach ($deletedCells as $deletedCell) {
+            assertSoftDeleted('cells', [
+                'id' => $deletedCell->id,
+                'number' => $deletedCell->number,
+                'level' => $deletedCell->level,
+                'position' => $deletedCell->position,
+            ]);
+        }
+    });
+
+    it('increases levels and reduces cells per level', function () {
+        $response = $this->be($this->user)->patchJson(route('racks-update', [$this->warehouse->id, $this->rack->id]), [
+            'levels_count' => 3,
+            'cells_per_level' => 2,
+        ]);
+
+        $response->assertStatus(200);
+
+        $response->assertJsonCount(6, 'cells');
+
+        $expectedCells = $response->json('cells');
+        $expectedCellIds = collect($expectedCells)->pluck('id')->all();
+        $deletedCells = $this->cells->whereNotIn('id', $expectedCellIds);
+
+        foreach ($expectedCells as $expectedCell) {
+            expect($expectedCell['level'])->toBeGreaterThanOrEqual(1)
+                ->and($expectedCell['level'])->toBeLessThanOrEqual(3)
+                ->and($expectedCell['position'])->toBeGreaterThanOrEqual(1)
+                ->and($expectedCell['position'])->toBeLessThanOrEqual(2);
+
+            assertDatabaseHas('cells', [
+                'id' => $expectedCell['id'],
+                'number' => $expectedCell['number'],
+                'level' => $expectedCell['level'],
+                'position' => $expectedCell['position'],
+            ]);
+        }
+
+        foreach ($deletedCells as $deletedCell) {
+            assertSoftDeleted('cells', [
+                'id' => $deletedCell->id,
+                'number' => $deletedCell->number,
+                'level' => $deletedCell->level,
+                'position' => $deletedCell->position,
+            ]);
+        }
+    });
+
+    it('reduces levels and increases cells per level', function () {
+        $response = $this->be($this->user)->patchJson(route('racks-update', [$this->warehouse->id, $this->rack->id]), [
+            'levels_count' => 1,
+            'cells_per_level' => 4,
+        ]);
+
+        $response->assertStatus(200);
+
+        $response->assertJsonCount(4, 'cells');
+
+        $expectedCells = $response->json('cells');
+        $expectedCellIds = collect($expectedCells)->pluck('id')->all();
+        $deletedCells = $this->cells->whereNotIn('id', $expectedCellIds);
+
+        foreach ($expectedCells as $expectedCell) {
+            expect($expectedCell['level'])->toBeGreaterThanOrEqual(1)
+                ->and($expectedCell['position'])->toBeGreaterThanOrEqual(1)
+                ->and($expectedCell['position'])->toBeLessThanOrEqual(4);
+
+            assertDatabaseHas('cells', [
+                'id' => $expectedCell['id'],
+                'number' => $expectedCell['number'],
+                'level' => $expectedCell['level'],
+                'position' => $expectedCell['position'],
+            ]);
+        }
+
+        foreach ($deletedCells as $deletedCell) {
+            assertSoftDeleted('cells', [
+                'id' => $deletedCell->id,
+                'number' => $deletedCell->number,
+                'level' => $deletedCell->level,
+                'position' => $deletedCell->position,
+            ]);
+        }
+    });
+
+    it('rejects a code used by another rack in the warehouse', function () {
+        $rack = Rack::factory()->create([
+            'warehouse_id' => $this->warehouse->id,
+        ]);
+
+        $response = $this->be($this->user)->patchJson(route('racks-update', [$this->warehouse->id, $this->rack->id]), [
+            'code' => $rack->code,
+        ]);
+
+        $response->assertStatus(422);
+
+        assertDatabaseHas('racks', [
+            'id' => $this->rack->id,
+            'code' => $this->rack->code,
+        ]);
+    });
+
+    it('increases cells per level and renumbers existing cells', function () {
+        $response = $this->be($this->user)->patchJson(route('racks-update', [$this->warehouse->id, $this->rack->id]), [
+            'cells_per_level' => 4,
+        ]);
+
+        $response->assertStatus(200);
+
+        $response->assertJsonCount(8, 'cells');
+
+        $expectedCells = $response->json('cells');
+
+        assertDatabaseHas('racks', [
+            'id' => $this->rack->id,
+            'cells_per_level' => 4,
+        ]);
+
+        foreach ($expectedCells as $expectedCell) {
+            expect($expectedCell['level'])->toBeGreaterThanOrEqual(1)
+                ->and($expectedCell['level'])->toBeLessThanOrEqual(2)
+                ->and($expectedCell['position'])->toBeGreaterThanOrEqual(1)
+                ->and($expectedCell['position'])->toBeLessThanOrEqual(4);
+
+            assertDatabaseHas('cells', [
+                'id' => $expectedCell['id'],
+                'number' => $expectedCell['number'],
+                'level' => $expectedCell['level'],
+                'position' => $expectedCell['position'],
+            ]);
+        }
+    });
+
+    it('allows shrinking when occupied cells are retained', function () {
+        $placement = InventoryPlacement::factory()->create([
+            'cell_id' => $this->cells->first()->id,
+        ]);
+
+        $response = $this->be($this->user)->patchJson(route('racks-update', [$this->warehouse->id, $this->rack->id]), [
+            'cells_per_level' => 1,
+        ]);
+
+        $response->assertStatus(200);
+
+        $response->assertJsonCount(2, 'cells');
+
+        $expectedCells = $response->json('cells');
+        $cellIds = collect($expectedCells)->pluck('id')->all();
+
+        expect($cellIds)->toContain($this->cells->first()->id);
+
+        assertDatabaseHas('racks', [
+            'id' => $this->rack->id,
+            'cells_per_level' => 1,
+        ]);
+
+        assertDatabaseHas('inventory_placements', [
+            'id' => $placement->id,
+            'cell_id' => $this->cells->first()->id,
+            'inventory_id' => $placement->inventory_id,
+            'quantity' => $placement->quantity,
+        ]);
+
+        assertNotSoftDeleted('cells', [
+            'id' => $this->cells->first()->id,
+        ]);
+    });
+
+    it('restores archived cells when cells per level is increased again', function () {
+        $response = $this->be($this->user)->patchJson(route('racks-update', [$this->warehouse->id, $this->rack->id]), [
+            'cells_per_level' => 1,
+        ]);
+
+        $response->assertStatus(200);
+
+        $response->assertJsonCount(2, 'cells');
+
+        $response = $this->be($this->user)->patchJson(route('racks-update', [$this->warehouse->id, $this->rack->id]), [
+            'cells_per_level' => 3,
+        ]);
+
+        $response->assertStatus(200);
+
+        $response->assertJsonCount(6, 'cells');
+
+        $expectedCells = $response->json('cells');
+        $expectedCellsCount = $response->json('levels_count') * $response->json('cells_per_level');
+        $expectedCellsNumber = collect($expectedCells)->map(function ($cell) {
+            return $cell['number'];
+        })->all();
+
+        expect($expectedCellsNumber)->toBe(range(1, $expectedCellsCount));
+
+        assertDatabaseHas('racks', [
+            'id' => $this->rack->id,
+            'cells_per_level' => 3,
+        ]);
+
+        assertDatabaseCount('cells', $expectedCellsCount);
+
+        foreach ($expectedCells as $expectedCell) {
+            expect($expectedCell['level'])->toBeGreaterThanOrEqual(1)
+                ->and($expectedCell['level'])->toBeLessThanOrEqual(2)
+                ->and($expectedCell['position'])->toBeGreaterThanOrEqual(1)
+                ->and($expectedCell['position'])->toBeLessThanOrEqual(3);
+
+            assertDatabaseHas('cells', [
+                'id' => $expectedCell['id'],
+                'number' => $expectedCell['number'],
+                'level' => $expectedCell['level'],
+                'position' => $expectedCell['position'],
+            ]);
+        }
+
+        foreach ($this->cells as $cell) {
+            assertNotSoftDeleted('cells', [
+                'id' => $cell->id,
+            ]);
+        }
+    });
+
+    it('restores archived cells when removed levels are added back', function () {
+        $response = $this->be($this->user)->patchJson(route('racks-update', [$this->warehouse->id, $this->rack->id]), [
+            'levels_count' => 1,
+        ]);
+
+        $response->assertStatus(200);
+
+        $response->assertJsonCount(3, 'cells');
+
+        $response = $this->be($this->user)->patchJson(route('racks-update', [$this->warehouse->id, $this->rack->id]), [
+            'levels_count' => 2,
+        ]);
+
+        $response->assertStatus(200);
+
+        $response->assertJsonCount(6, 'cells');
+
+        $expectedCells = $response->json('cells');
+        $expectedCellsCount = $response->json('levels_count') * $response->json('cells_per_level');
+        $expectedCellsNumber = collect($expectedCells)->map(function ($cell) {
+            return $cell['number'];
+        })->all();
+
+        expect($expectedCellsNumber)->toBe(range(1, $expectedCellsCount));
+
+        assertDatabaseHas('racks', [
+            'id' => $this->rack->id,
+            'levels_count' => 2,
+        ]);
+
+        assertDatabaseCount('cells', $expectedCellsCount);
+
+        foreach ($expectedCells as $expectedCell) {
+            expect($expectedCell['level'])->toBeGreaterThanOrEqual(1)
+                ->and($expectedCell['level'])->toBeLessThanOrEqual(2)
+                ->and($expectedCell['position'])->toBeGreaterThanOrEqual(1)
+                ->and($expectedCell['position'])->toBeLessThanOrEqual(3);
+
+            assertDatabaseHas('cells', [
+                'id' => $expectedCell['id'],
+                'number' => $expectedCell['number'],
+                'level' => $expectedCell['level'],
+                'position' => $expectedCell['position'],
+            ]);
+        }
+
+        foreach ($this->cells as $cell) {
+            assertNotSoftDeleted('cells', [
+                'id' => $cell->id,
+            ]);
+        }
+    });
+
+    it('rejects a code used by an archived rack in the warehouse', function () {
+        $rack = Rack::factory()->create([
+            'warehouse_id' => $this->warehouse->id,
+            'code' => 'ST-01',
+        ]);
+
+        $rack->delete();
+
+        $response = $this->be($this->user)->patchJson(route('racks-update', [$this->warehouse->id, $this->rack->id]), [
+            'code' => 'ST-01',
+        ]);
+
+        $response->assertStatus(422);
+
+        assertDatabaseHas('racks', [
+            'id' => $this->rack->id,
+            'code' => $this->rack->code,
+        ]);
+    });
+
+    it('rejects removing cells that contain inventory placements', function () {
+        $placement = InventoryPlacement::factory()->create([
+            'cell_id' => $this->cells->last()->id,
+        ]);
+
+        $response = $this->be($this->user)->patchJson(route('racks-update', [$this->warehouse->id, $this->rack->id]), [
+            'cells_per_level' => 1,
+        ]);
+
+        $response->assertStatus(409);
+
+        assertDatabaseHas('racks', [
+            'id' => $this->rack->id,
+            'code' => $this->rack->code,
+            'levels_count' => $this->rack->levels_count,
+            'cells_per_level' => $this->rack->cells_per_level,
+        ]);
+
+        assertDatabaseHas('inventory_placements', [
+            'id' => $placement->id,
+            'cell_id' => $this->cells->last()->id,
+            'inventory_id' => $placement->inventory_id,
+            'quantity' => $placement->quantity,
+        ]);
+
+        foreach ($this->cells as $cell) {
+            assertDatabaseHas('cells', [
+                'id' => $cell->id,
+                'number' => $cell->number,
+                'level' => $cell->level,
+                'position' => $cell->position,
+                'active_marker' => 1,
+            ]);
+        }
+
+        assertNotSoftDeleted('cells', [
+            'id' => $this->cells->last()->id,
+        ]);
+    });
+
+    it('rejects an invalid rack update payload', function (array $payload, string $errorKey, string $expectedMessage) {
+        $response = $this->be($this->user)->patchJson(route('racks-update', [$this->warehouse->id, $this->rack->id]), $payload);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors([
+                $errorKey => $expectedMessage,
+            ]);
+
+        assertDatabaseHas('racks', [
+            'id' => $this->rack->id,
+            'code' => $this->rack->code,
+            'levels_count' => $this->rack->levels_count,
+            'cells_per_level' => $this->rack->cells_per_level,
+        ]);
+
+        assertDatabaseCount('cells', $this->cells->count());
+    })->with([
+        'code: не строка' => [
+            ['code' => 12345],
+            'code',
+            'Код стеллажа должен быть текстовой строкой.',
+        ],
+        'code: слишком длинный' => [
+            ['code' => str_repeat('A', 21)],
+            'code',
+            'Код стеллажа не должен превышать 20 символов.',
+        ],
+        'levels_count: не целое число' => [
+            ['levels_count' => 'two'],
+            'levels_count',
+            'Количество уровней должно быть целым числом.',
+        ],
+        'levels_count: меньше минимума (0)' => [
+            ['levels_count' => 0],
+            'levels_count',
+            'Стеллаж должен иметь как минимум 1 уровень.',
+        ],
+        'levels_count: превышает максимум (11)' => [
+            ['levels_count' => 11],
+            'levels_count',
+            'Количество уровней не может превышать 10.',
+        ],
+        'cells_per_level: не целое число' => [
+            ['cells_per_level' => 4.5],
+            'cells_per_level',
+            'Количество ячеек на уровне должно быть целым числом.',
+        ],
+        'cells_per_level: меньше минимума (0)' => [
+            ['cells_per_level' => 0],
+            'cells_per_level',
+            'На уровне должна быть как минимум 1 ячейка.',
+        ],
+        'cells_per_level: превышает максимум (11)' => [
+            ['cells_per_level' => 11],
+            'cells_per_level',
+            'Количество ячеек на уровне не может превышать 10.',
+        ],
+    ]);
+
+    it('returns 404 when the rack does not exist', function () {
+        $response = $this->be($this->user)->patchJson(route('racks-update', [$this->warehouse->id, $this->rack->id + 1000]), [
+            'cells_per_level' => 4,
+        ]);
+
+        $response->assertStatus(404);
+
+        assertDatabaseHas('racks', [
+            'id' => $this->rack->id,
+            'cells_per_level' => $this->rack->cells_per_level,
+        ]);
+
+        assertDatabaseCount('cells', $this->cells->count());
+    });
+
+    it('returns 404 when the warehouse does not exist', function () {
+        $response = $this->be($this->user)->patchJson(route('racks-update', [$this->warehouse->id + 1000, $this->rack->id]), [
+            'cells_per_level' => 4,
+        ]);
+
+        $response->assertStatus(404);
+
+        assertDatabaseHas('racks', [
+            'id' => $this->rack->id,
+            'cells_per_level' => $this->rack->cells_per_level,
+        ]);
+
+        assertDatabaseCount('cells', $this->cells->count());
+    });
+
+    it('returns 404 when the rack belongs to another warehouse', function () {
+        $warehouse = Warehouse::factory()->create();
+
+        $response = $this->be($this->user)->patchJson(route('racks-update', [$warehouse->id, $this->rack->id]), [
+            'cells_per_level' => 4,
+        ]);
+
+        $response->assertStatus(404);
+
+        assertDatabaseHas('racks', [
+            'id' => $this->rack->id,
+            'cells_per_level' => $this->rack->cells_per_level,
+        ]);
+
+        assertDatabaseCount('cells', $this->cells->count());
+    });
+
+    it('rejects an unauthenticated request', function () {
+        $response = $this->patchJson(route('racks-update', [$this->warehouse->id, $this->rack->id]), [
+            'cells_per_level' => 1,
+        ]);
+
+        $response->assertStatus(401);
+
+        $response->assertJson([
+            'message' => 'Unauthenticated.',
+        ]);
+
+        assertDatabaseHas('racks', [
+            'id' => $this->rack->id,
+            'cells_per_level' => $this->rack->cells_per_level,
+        ]);
+
+        foreach ($this->cells as $cell) {
+            assertNotSoftDeleted('cells', [
+                'id' => $cell->id,
+                'number' => $cell->number,
+                'level' => $cell->level,
+                'position' => $cell->position,
+                'deleted_at' => null,
+            ]);
+        }
+    });
+});
