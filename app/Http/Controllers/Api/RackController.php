@@ -7,6 +7,7 @@ use App\Exceptions\RackNotFoundException;
 use App\Exceptions\WarehouseNotFoundException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\RackCreateRequest;
+use App\Http\Requests\RackUpdateRequest;
 use App\Http\Resources\RackCollection;
 use App\UseCases\Rack\Create\CreateRackItemInput;
 use App\UseCases\Rack\Create\CreateRacks;
@@ -15,6 +16,8 @@ use App\UseCases\Rack\Delete\DeleteRack;
 use App\UseCases\Rack\Delete\DeleteRackInput;
 use App\UseCases\Rack\QueryList\QueryListRack;
 use App\UseCases\Rack\QueryList\QueryListRackInput;
+use App\UseCases\Rack\Update\UpdateRack;
+use App\UseCases\Rack\Update\UpdateRackInput;
 use Dedoc\Scramble\Attributes\Response as ScrambleResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -72,6 +75,16 @@ class RackController extends Controller
      * @throws RackNotFoundException
      * @throws WarehouseNotFoundException
      */
+    #[ScrambleResponse(
+        status: 404,
+        description: 'Resource not found',
+        type: 'array{message: string}'
+    )]
+    #[ScrambleResponse(
+        status: 409,
+        description: 'Resource state conflict or business logic violation.',
+        type: 'array{message: string}'
+    )]
     public function delete(Request $request, DeleteRack $deleteRack): Response
     {
         $input = new DeleteRackInput((int) $request->route('warehouseId'), (int) $request->route('rackId'));
@@ -79,5 +92,41 @@ class RackController extends Controller
         ($deleteRack)($input);
 
         return response()->noContent();
+    }
+
+    /**
+     * @throws \Throwable
+     * @throws RackNotFoundException
+     * @throws WarehouseNotFoundException
+     */
+    #[ScrambleResponse(
+        status: 404,
+        description: 'Resource not found',
+        type: 'array{message: string}'
+    )]
+    #[ScrambleResponse(
+        status: 409,
+        description: 'Resource state conflict or business logic violation.',
+        type: 'array{message: string}'
+    )]
+    public function update(RackUpdateRequest $request, UpdateRack $updateRack): JsonResponse
+    {
+        $input = new UpdateRackInput(
+            (int) $request->route('warehouseId'),
+            (int) $request->route('rackId'),
+            $request->has('code') ? $request->string('code')->toString() : null,
+            $request->has('levels_count') ? (int) $request->input('levels_count') : null,
+            $request->has('cells_per_level') ? (int) $request->input('cells_per_level') : null,
+        );
+
+        $output = ($updateRack)($input);
+
+        return response()->json([
+            'id' => $output->rackId,
+            'code' => $output->rackCode,
+            'levels_count' => $output->levelsCount,
+            'cells_per_level' => $output->cellsPerLevel,
+            'cells' => $output->cells,
+        ]);
     }
 }
