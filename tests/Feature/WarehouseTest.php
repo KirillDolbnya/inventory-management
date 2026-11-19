@@ -664,6 +664,32 @@ describe('Warehouse delete', function () {
         Storage::disk('public')->assertExists($this->warehouse->model_path);
     });
 
+    it('archives a warehouse with its racks', function () {
+        $rack = Rack::factory()->create([
+            'warehouse_id' => $this->warehouse->id,
+        ]);
+
+        $cell = Cell::factory()->create([
+            'rack_id' => $rack->id,
+        ]);
+
+        $response = $this->be($this->user)->deleteJson(route('warehouses-delete', ['warehouseId' => $this->warehouse->id]));
+
+        $response->assertNoContent();
+
+        assertSoftDeleted('warehouses', [
+            'id' => $this->warehouse->id,
+        ]);
+
+        assertSoftDeleted('racks', [
+            'id' => $rack->id,
+        ]);
+
+        assertSoftDeleted('cells', [
+            'id' => $cell->id,
+        ]);
+    });
+
     it('rejects archiving a warehouse with inventory placements', function () {
         $rack = Rack::factory()->create([
             'warehouse_id' => $this->warehouse->id,
@@ -691,6 +717,14 @@ describe('Warehouse delete', function () {
 
         assertDatabaseHas('inventory_placements', [
             'id' => $placement->id,
+        ]);
+
+        assertNotSoftDeleted('racks', [
+            'id' => $rack->id,
+        ]);
+
+        assertNotSoftDeleted('cells', [
+            'id' => $cell->id,
         ]);
     });
 
